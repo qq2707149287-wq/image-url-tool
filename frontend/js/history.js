@@ -1,11 +1,10 @@
 "use strict";
 
-// 全局分页状态
 window.historyPage = 1;
 window.historyPageSize = 10;
 window.historyFilteredData = [];
 
-// === 核心保存逻辑：合并去重 ===
+// 保存历史
 window.saveToHistory = function(data) {
     try {
         var raw = localStorage.getItem("uploadHistory");
@@ -19,7 +18,6 @@ window.saveToHistory = function(data) {
         } else if (data.url) {
             newLinks = [{ service: data.service, url: data.url }];
         }
-
         if (!newLinks.length) return;
 
         var idx = -1;
@@ -44,7 +42,6 @@ window.saveToHistory = function(data) {
             if (!item.all_results || !Array.isArray(item.all_results)) {
                 item.all_results = [{ service: item.service, url: item.url }];
             }
-
             for (var k = 0; k < newLinks.length; k++) {
                 var link = newLinks[k];
                 var exists = false;
@@ -58,13 +55,11 @@ window.saveToHistory = function(data) {
                     item.all_results.push(link);
                 }
             }
-            
             item.time = new Date().toLocaleString();
             item.url = data.url;
-            
+            item.filename = data.filename || item.filename || "未命名";
             list.splice(idx, 1);
             list.unshift(item);
-
         } else {
             var newItem = {
                 url: newLinks[0].url,
@@ -73,39 +68,61 @@ window.saveToHistory = function(data) {
                 time: new Date().toLocaleString(),
                 hash: hash,
                 all_results: newLinks,
-                linkStatus: "unknown"
+                linkStatus: data.linkStatus || "unknown"
             };
             list.unshift(newItem);
         }
 
         if (list.length > 500) list = list.slice(0, 500);
-
         localStorage.setItem("uploadHistory", JSON.stringify(list));
 
-        if (typeof renderHistory === 'function') renderHistory();
-
+        if (typeof window.displayHistory === "function") {
+            window.displayHistory();
+        }
     } catch (e) {
         console.error("History save error:", e);
     }
 };
 
+// 新增：按 URL 重命名（上传页、粘贴页、公用）
+window.renameHistoryByUrl = function(url, newName) {
+    if (!url || !newName) return;
+    try {
+        var raw = localStorage.getItem("uploadHistory");
+        var list = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(list)) list = [];
 
-// === 页面渲染逻辑 ===
+        var changed = false;
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].url === url) {
+                list[i].filename = newName;
+                changed = true;
+                break;
+            }
+        }
+        if (!changed) return;
+
+        localStorage.setItem("uploadHistory", JSON.stringify(list));
+        if (typeof window.displayHistory === "function") {
+            window.displayHistory();
+        }
+    } catch (e) {
+        console.error("renameHistoryByUrl error:", e);
+    }
+};
+
 document.addEventListener("DOMContentLoaded", function () {
     var historyList = document.getElementById("historyList");
     if (!historyList) return;
 
-    var clearBtn = document.getElementById("clearHistoryBtn");
-    var searchInput = document.getElementById("historySearch");
-    var exportBtn = document.getElementById("exportJsonBtn");
-    var importBtn = document.getElementById("importJsonBtn");
-    var importInput = document.getElementById("importFileInput");
-    var tabHistory = document.getElementById("tab-history");
-
+    var clearBtn      = document.getElementById("clearHistoryBtn");
+    var searchInput   = document.getElementById("historySearch");
+    var exportBtn     = document.getElementById("exportJsonBtn");
+    var importBtn     = document.getElementById("importJsonBtn");
+    var importInput   = document.getElementById("importFileInput");
+    var tabHistory    = document.getElementById("tab-history");
     var paginationBar = document.getElementById("historyPagination");
-    var pageInfoText = document.getElementById("historyPageInfo");
-
-    window.displayHistory = renderHistory;
+    var pageInfoText  = document.getElementById("historyPageInfo");
 
     function renderHistory() {
         var keyword = searchInput ? searchInput.value.trim().toLowerCase() : "";
@@ -117,23 +134,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
         var filteredList = list.filter(function(item) {
             if (!keyword) return true;
-             return (item.filename || "").toLowerCase().indexOf(keyword) !== -1 ||
-                    (item.url || "").toLowerCase().indexOf(keyword) !== -1;
+            return (item.filename || "").toLowerCase().indexOf(keyword) !== -1 ||
+                   (item.url || "").toLowerCase().indexOf(keyword) !== -1;
         });
         
         window.historyFilteredData = filteredList;
 
         if (filteredList.length === 0) {
             historyList.innerHTML = '<div class="empty-state" style="text-align:center;padding:20px;color:#999">暂无历史记录</div>';
-            if(paginationBar) paginationBar.style.display = 'none';
+            if (paginationBar) paginationBar.style.display = 'none';
             return;
         }
 
-        if(paginationBar) paginationBar.style.display = 'flex';
+        if (paginationBar) paginationBar.style.display = 'flex';
         
         var totalPages = Math.ceil(filteredList.length / window.historyPageSize);
         if (totalPages < 1) totalPages = 1;
-        
         if (window.historyPage > totalPages) window.historyPage = totalPages;
         if (window.historyPage < 1) window.historyPage = 1;
 
@@ -167,8 +183,8 @@ document.addEventListener("DOMContentLoaded", function () {
             
             var nameSpan = document.createElement("span");
             nameSpan.className = "history-name";
-            nameSpan.textContent = item.filename;
-            nameSpan.title = item.filename;
+            nameSpan.textContent = item.filename || "未命名";
+            nameSpan.title = item.filename || "未命名";
             nameRow.appendChild(nameSpan);
 
             if (all.length > 1) {
@@ -179,13 +195,13 @@ document.addEventListener("DOMContentLoaded", function () {
             } else {
                 var badgeS = document.createElement("span");
                 badgeS.className = "source-badge";
-                badgeS.textContent = item.service;
+                badgeS.textContent = item.service || "MyCloud";
                 nameRow.appendChild(badgeS);
             }
 
             var meta = document.createElement("div");
             meta.className = "history-time";
-            meta.textContent = item.time;
+            meta.textContent = item.time || "";
 
             infoDiv.appendChild(nameRow);
             infoDiv.appendChild(meta);
@@ -197,7 +213,7 @@ document.addEventListener("DOMContentLoaded", function () {
             btnCopy.className = "btn-mini";
             btnCopy.textContent = "复制";
             btnCopy.onclick = function() {
-                if (navigator.clipboard) {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
                     navigator.clipboard.writeText(displayUrl);
                 } else {
                     var ta = document.createElement("textarea");
@@ -207,7 +223,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     document.execCommand("copy");
                     document.body.removeChild(ta);
                 }
-                if(window.showToast) showToast("已复制");
+                if (window.showToast) window.showToast("已复制");
                 else alert("已复制");
             };
 
@@ -218,8 +234,20 @@ document.addEventListener("DOMContentLoaded", function () {
                 window.open(displayUrl, "_blank");
             };
 
+            // 新增：重命名按钮
+            var btnRename = document.createElement("button");
+            btnRename.className = "btn-mini";
+            btnRename.textContent = "重命名";
+            btnRename.onclick = function () {
+                var current = item.filename || "";
+                var newName = window.prompt("输入新的图片名称", current);
+                if (!newName) return;
+                window.renameHistoryByUrl(displayUrl, newName);
+            };
+
             actions.appendChild(btnCopy);
             actions.appendChild(btnOpen);
+            actions.appendChild(btnRename);
 
             if (all.length > 1) {
                 var btnToggle = document.createElement("button");
@@ -268,7 +296,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     copySub.style.marginLeft = "auto";
                     copySub.onclick = function() {
                         navigator.clipboard.writeText(sub.url);
-                        if(window.showToast) showToast("已复制 " + sub.service);
+                        if (window.showToast) window.showToast("已复制 " + sub.service);
                     };
 
                     row.appendChild(tag);
@@ -282,6 +310,8 @@ document.addEventListener("DOMContentLoaded", function () {
             historyList.appendChild(card);
         });
     }
+
+    window.displayHistory = renderHistory;
 
     window.prevHistoryPage = function() {
         if (window.historyPage > 1) {
@@ -297,27 +327,29 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     };
     window.changeHistoryPageSize = function(val) {
-        window.historyPageSize = parseInt(val);
+        window.historyPageSize = parseInt(val, 10);
         window.historyPage = 1;
         renderHistory();
     };
 
-    if (searchInput) searchInput.oninput = function() {
-        window.historyPage = 1;
-        renderHistory();
-    };
-    if (tabHistory) tabHistory.onclick = renderHistory;
-    
+    if (searchInput) {
+        searchInput.oninput = function() {
+            window.historyPage = 1;
+            renderHistory();
+        };
+    }
+    if (tabHistory) {
+        tabHistory.onclick = renderHistory;
+    }
     if (clearBtn) {
         clearBtn.onclick = function() {
-            if (confirm("确定清空所有历史记录？")) {
+            if (window.confirm("确定清空所有历史记录？")) {
                 localStorage.removeItem("uploadHistory");
                 renderHistory();
             }
         };
     }
 
-    // 导出功能：使用 data URI 方案，完全不用那个构造函数
     if (exportBtn) {
         exportBtn.onclick = function() {
             var raw = localStorage.getItem("uploadHistory");

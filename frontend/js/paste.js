@@ -1,4 +1,28 @@
-// 粘贴上传逻辑（仅使用 MyCloud）
+// 粘贴上传逻辑（仅 MyCloud）
+
+window.lastPasteUrl = null;
+
+// 命名规则同上传：hash > URL 路径 > 时间戳
+function getDefaultNameFromResultForPaste(res) {
+    if (res && res.hash) {
+        return res.hash;
+    }
+    var url = res && res.url ? res.url : "";
+    if (url) {
+        try {
+            var u = new URL(url, window.location.origin);
+            var path = u.pathname || "";
+            var segs = path.split("/").filter(Boolean);
+            if (segs.length) {
+                var last = segs[segs.length - 1];
+                var dot = last.lastIndexOf(".");
+                if (dot > 0) last = last.substring(0, dot);
+                if (last) return last;
+            }
+        } catch (e) {}
+    }
+    return "img_" + Date.now();
+}
 
 document.addEventListener('DOMContentLoaded', function () {
     var pasteArea       = document.getElementById('pasteArea');
@@ -12,7 +36,24 @@ document.addEventListener('DOMContentLoaded', function () {
     var openBtn         = document.getElementById('pasteOpenBtn');
     var infoBox         = document.getElementById('pasteImageInfo');
 
-    if (!pasteArea) return; // 安全保护
+    var nameInput       = document.getElementById('pasteFilenameInput');
+    var renameBtn       = document.getElementById('pasteRenameSaveBtn');
+
+    if (renameBtn && nameInput) {
+        renameBtn.onclick = function () {
+            var newName = nameInput.value.trim();
+            if (!newName) {
+                alert("名称不能为空");
+                return;
+            }
+            if (window.lastPasteUrl && window.renameHistoryByUrl) {
+                window.renameHistoryByUrl(window.lastPasteUrl, newName);
+                if (window.showToast) window.showToast("名称已更新");
+            }
+        };
+    }
+
+    if (!pasteArea) return;
 
     function showLoading(show) {
         if (pasteLoading) pasteLoading.style.display = show ? 'flex' : 'none';
@@ -29,13 +70,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // 简单的 URL 判断
     function looksLikeUrl(text) {
         if (!text) return false;
         return /^https?:\/\//i.test(text.trim());
     }
 
-    // 复制：这里直接复制 URL（不折腾格式）
     function copyText(text) {
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text);
@@ -54,10 +93,15 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // 把上传结果渲染到粘贴结果框 + 写入历史
+    // 统一渲染上传结果 + 写入历史
     function renderUploadResult(data) {
         if (!data || !data.url) return;
         var url = data.url;
+
+        window.lastPasteUrl = url;
+
+        var displayName = getDefaultNameFromResultForPaste(data);
+        data.filename = displayName;
 
         setPreview(url);
         if (serviceBadge) serviceBadge.textContent = data.service || 'MyCloud';
@@ -83,14 +127,17 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
+        if (nameInput) {
+            nameInput.value = displayName;
+        }
+
         showResultBox(true);
 
-        // 同时写入历史
         if (window.saveToHistory) {
             window.saveToHistory({
                 url: url,
                 service: data.service || 'MyCloud',
-                filename: data.filename || '粘贴上传',
+                filename: displayName,
                 hash: data.hash || null,
                 all_results: data.all_results || [{
                     service: data.service || 'MyCloud',
@@ -103,20 +150,17 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // 处理图片文件粘贴
     async function handleImageFilePaste(file) {
         if (!file) return;
         showLoading(true);
         showResultBox(false);
 
-        // 预览本地图
         var localUrl = URL.createObjectURL(file);
         setPreview(localUrl);
 
         try {
             var form = new FormData();
             form.append('file', file);
-            // 后端现在只认 myminio，但这个字段保留也无妨
             form.append('services', 'myminio');
 
             var resp = await fetch('/upload', {
@@ -141,7 +185,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // 处理文本 URL 粘贴（当网页图片用）
     async function handleUrlPaste(url) {
         url = url.trim();
         if (!looksLikeUrl(url)) {
@@ -167,7 +210,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            // 预览直接用原链接
+            window.lastPasteUrl = url;
+
+            var fakeRes = { url: url, service: '网页图片' };
+            var displayName = getDefaultNameFromResultForPaste(fakeRes);
+            fakeRes.filename = displayName;
+
             setPreview(url);
             if (serviceBadge) serviceBadge.textContent = '网页图片';
             if (resultLinkEl) {
@@ -175,14 +223,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 resultLinkEl.href = url;
             }
             if (infoBox) infoBox.innerHTML = '';
+            if (nameInput) nameInput.value = displayName;
             showResultBox(true);
 
-            // 也写入历史（类型：网页图片）
             if (window.saveToHistory) {
                 window.saveToHistory({
                     url: url,
                     service: '网页图片',
-                    filename: '粘贴链接',
+                    filename: displayName,
                     hash: null,
                     all_results: [{service: '网页图片', url: url}]
                 });
@@ -196,14 +244,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // 主 paste 事件处理
     function onPaste(e) {
         var clipboard = e.clipboardData || window.clipboardData;
         if (!clipboard) return;
 
         var items = clipboard.items;
         if (items && items.length) {
-            // 先找图片文件
             for (var i = 0; i < items.length; i++) {
                 var it = items[i];
                 if (it.kind === 'file' && it.type.indexOf('image/') === 0) {
@@ -215,7 +261,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        // 退而求其次：尝试当文本 URL
         var text = clipboard.getData('text');
         if (text && looksLikeUrl(text)) {
             e.preventDefault();
@@ -223,22 +268,18 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // 既绑定 paste 区域，也绑定全局，防止用户忘记点一下区域
     pasteArea.addEventListener('paste', onPaste);
     window.addEventListener('paste', function (e) {
-        // 如果当前 focus 在输入框里，你可能是在别的地方粘贴，就忽略
         var active = document.activeElement;
         var tag = active && active.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         onPaste(e);
     });
 
-    // 区域点击时获取焦点，提示用户
     pasteArea.addEventListener('click', function () {
         pasteArea.focus();
     });
 
-    // 绑定三个按钮
     if (copyBtn) {
         copyBtn.addEventListener('click', function () {
             if (resultLinkEl && resultLinkEl.href) {

@@ -16,32 +16,28 @@
             </div>
         </div>
         
-        <!-- 导航栏 -->
         <div class="tabs">
             <button class="tab active" id="tab-upload">批量上传</button>
             <button class="tab" id="tab-paste">粘贴上传</button>
             <button class="tab" id="tab-history">历史记录</button>
         </div>
         
-        <!-- ========================================= -->
-        <!--              1. 批量上传页                -->
-        <!-- ========================================= -->
+        <!-- 1. 批量上传页 -->
         <div id="content-upload" class="tab-content active">
             <div id="uploadArea" class="upload-area">
                 <p>点击或拖拽多张图片到这里</p>
                 <p class="hint">所有图片统一上传到 MyCloud</p>
             </div>
 
-            <!-- 这里原来是多图床选择，现在改为“隐藏但保留结构” -->
+            <!-- 图床选择：隐藏，只保留 myminio 供 JS 读取 -->
             <div class="service-selector" id="uploadServiceSelector" style="display:none;">
                 <p class="selector-title">上传目标（仅 MyCloud 有效）</p>
                 <div class="checkbox-group">
-                    <!-- 只保留 myminio 这个输入，让 upload.js 还能读取到 -->
                     <label><input type="checkbox" value="myminio" checked> MyCloud</label>
                 </div>
             </div>
 
-            <!-- 压缩和格式选项（必须保留，否则相关 JS 会找不到控件） -->
+            <!-- 压缩选项（已修复点击文字问题） -->
             <div class="compress-options">
                 <span>压缩等级: </span>
                 <label style="margin-right: 8px;">
@@ -65,11 +61,8 @@
             </div>
 
             <input type="file" id="fileInput" accept="image/*" multiple hidden>
-            
-            <!-- 批量上传进度 / 结果列表 -->
             <div id="uploadBatchList" class="batch-list"></div>
 
-            <!-- 上传列表分页控件 -->
             <div id="uploadPagination" class="pagination-bar" style="display:none; margin-top:15px; padding:10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; justify-content:space-between; align-items:center;">
                 <div>
                     <span style="font-size:13px; color:var(--text-secondary);">每页显示:</span>
@@ -87,7 +80,7 @@
                 </div>
             </div>
 
-            <!-- 单张/最后一张上传结果（很多 JS 依赖这些 id，必须恢复） -->
+            <!-- 最新上传结果 + 重命名 -->
             <div id="uploadResult" class="result-box" style="display:none; margin-top: 20px;">
                 <h3>最新上传结果</h3>
                 <span id="uploadServiceBadge" class="service-badge"></span>
@@ -99,19 +92,24 @@
                     <button class="copy-btn" id="uploadQrBtn">二维码</button>
                     <button class="copy-btn" id="uploadOpenBtn">打开图片</button>
                 </div>
+
+                <!-- 新增：上传页重命名 -->
+                <div class="rename-box" style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+                    <span>图片名称:</span>
+                    <input type="text" id="uploadFilenameInput" class="input-text" style="flex:1; min-width:0;">
+                    <button class="btn-mini" id="uploadRenameSaveBtn">保存名称</button>
+                </div>
+
                 <div id="uploadImageInfo" class="info-grid" style="margin-top: 15px;"></div>
             </div>
         </div>
         
-        <!-- ========================================= -->
-        <!--              2. 粘贴上传页                -->
-        <!-- ========================================= -->
+        <!-- 2. 粘贴上传页 -->
         <div id="content-paste" class="tab-content">
             <div id="pasteArea" class="paste-area" tabindex="0">
                 <p>Ctrl + V 在此处粘贴图片</p>
             </div>
 
-            <!-- 粘贴页的图床选择同样隐藏，只留下 myminio -->
             <div class="service-selector" id="pasteServiceSelector" style="display:none;">
                 <p class="selector-title">上传目标（仅 MyCloud 有效）</p>
                 <div class="checkbox-group">
@@ -135,13 +133,19 @@
                     <button class="copy-btn" id="pasteQrBtn">二维码</button>
                     <button class="copy-btn" id="pasteOpenBtn">打开</button>
                 </div>
+
+                <!-- 新增：粘贴页重命名 -->
+                <div class="rename-box" style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+                    <span>图片名称:</span>
+                    <input type="text" id="pasteFilenameInput" class="input-text" style="flex:1; min-width:0;">
+                    <button class="btn-mini" id="pasteRenameSaveBtn">保存名称</button>
+                </div>
+
                 <div id="pasteImageInfo" class="info-grid"></div>
             </div>
         </div>
         
-        <!-- ========================================= -->
-        <!--              3. 历史记录页                -->
-        <!-- ========================================= -->
+        <!-- 3. 历史记录页 -->
         <div id="content-history" class="tab-content">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
                 <h3>历史记录</h3>
@@ -159,7 +163,6 @@
             
             <div id="historyList"></div>
 
-            <!-- 历史记录分页控件 -->
             <div id="historyPagination" class="pagination-bar" style="display:none; margin-top:15px; padding:10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; justify-content:space-between; align-items:center;">
                 <div>
                     <span style="font-size:13px; color:var(--text-secondary);">每页显示:</span>
@@ -179,13 +182,10 @@
         </div>
     </div>
 
-    <!-- 全局组件 -->
     <div id="toast-container" class="toast-container"></div>
     
-    <!-- 第三方库 -->
     <script src="https://cdn.staticfile.org/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-    <!-- 本地逻辑 -->
     <script src="/static/js/ui.js" defer></script>
     <script src="/static/js/core.js" defer></script>
     <script src="/static/js/upload.js" defer></script>
