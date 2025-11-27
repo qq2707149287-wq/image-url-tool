@@ -1,8 +1,15 @@
+// upload.js - 完整版，包含前端分页、去重
+
+// 全局状态
+window.allUploadResults = []; 
+window.uploadPage = 1;
+window.uploadPageSize = 10;
+
 document.addEventListener('DOMContentLoaded', function() {
     var dropArea = document.getElementById('uploadArea');
     var fileInput = document.getElementById('fileInput');
-    
-    // 初始化事件绑定
+
+    // 初始化拖拽和选择事件
     if (dropArea) {
         dropArea.onclick = function() { fileInput.click(); };
         dropArea.ondragover = function(e) { e.preventDefault(); this.classList.add('drag-over'); };
@@ -13,18 +20,68 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function handleFiles(files) {
         if (!files.length) return;
-        Array.from(files).forEach(uploadFile);
-        fileInput.value = '';
+        // 转为数组处理
+        var arr = [];
+        for(var i=0; i<files.length; i++) arr.push(files[i]);
+        arr.forEach(uploadFile);
+        fileInput.value = ''; 
     }
+
+    // === 分页渲染器 ===
+    window.renderUploadList = function() {
+        var listEl = document.getElementById('uploadBatchList');
+        var pagi = document.getElementById('uploadPagination');
+        
+        // 1. 保护进度条：把正在上传的临时卡片拿出来
+        var temps = [];
+        var children = listEl.children;
+        for(var i=0; i<children.length; i++) {
+            if(children[i].classList.contains('temp-card')) temps.push(children[i]);
+        }
+        
+        listEl.innerHTML = '';
+        
+        // 2. 先放进度条
+        temps.forEach(function(node) { listEl.appendChild(node); });
+
+        // 3. 检查数据量
+        var total = window.allUploadResults.length;
+        if (total === 0 && temps.length === 0) {
+            if(pagi) pagi.style.display = 'none';
+            return;
+        }
+        if(pagi) pagi.style.display = 'flex';
+
+        // 4. 计算分页
+        var maxPage = Math.ceil(total / window.uploadPageSize);
+        if (maxPage < 1) maxPage = 1;
+        if (window.uploadPage > maxPage) window.uploadPage = maxPage;
+        if (window.uploadPage < 1) window.uploadPage = 1;
+
+        // 更新页码显示
+        var info = document.getElementById('uploadPageInfo');
+        if(info) info.innerText = window.uploadPage + ' / ' + maxPage;
+
+        // 5. 切片并渲染
+        var start = (window.uploadPage - 1) * window.uploadPageSize;
+        var end = start + window.uploadPageSize;
+        var slice = window.allUploadResults.slice(start, end);
+
+        slice.forEach(function(data) {
+            listEl.appendChild(createResultCard(data));
+        });
+    };
+
+    // === 上传逻辑 ===
     async function uploadFile(file) {
         var batchList = document.getElementById('uploadBatchList');
-        var wrapper = document.createElement('div');
-        wrapper.className = 'history-card';
-        wrapper.style.opacity = '0.7';
-
-        // 缩略图预览
-        var url = URL.createObjectURL(file);
         
+        // 创建临时卡片
+        var wrapper = document.createElement('div');
+        wrapper.className = 'history-card temp-card';
+        wrapper.style.opacity = '0.8';
+        
+        var url = URL.createObjectURL(file);
         wrapper.innerHTML = 
             '<div class="history-main-row">' +
                 '<img src="' + url + '" class="history-thumb">' +
@@ -33,125 +90,119 @@ document.addEventListener('DOMContentLoaded', function() {
                     '<span class="source-badge">⏳ 上传中...</span>' +
                 '</div>' +
             '</div>' +
-            '<div class="progress-bar" style="height:2px;background:blue;width:0%"></div>';
+            '<div class="batch-progress-bar" style="width:0%"></div>';
         
         batchList.insertBefore(wrapper, batchList.firstChild);
-        var bar = wrapper.querySelector('.progress-bar');
+        var bar = wrapper.querySelector('.batch-progress-bar');
         
         try {
             var formData = new FormData();
             formData.append('file', file);
-            
-            // 获取图床选项
             var nodes = document.querySelectorAll('#uploadServiceSelector input:checked');
             var svcs = [];
-            for (var i = 0; i < nodes.length; i++) svcs.push(nodes[i].value);
+            for(var i=0; i<nodes.length; i++) svcs.push(nodes[i].value);
             formData.append('services', svcs.join(','));
 
             bar.style.width = '50%';
-            
             var resp = await fetch('/upload', { method: 'POST', body: formData });
             var res = await resp.json();
-            
             bar.style.width = '100%';
-            setTimeout(function() { bar.remove(); wrapper.style.opacity = '1'; }, 300);
 
-            if (res.success) {
-                // 成功：渲染成功卡片
-                renderSuccessCard(wrapper, res);
-                if (window.saveToHistory) window.saveToHistory(res);
-            } else {
-                // 失败：渲染失败提示
-                renderErrorCard(wrapper, res);
-            }
+            setTimeout(function() {
+                // 移除临时卡片
+                if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
+
+                if (res.success) {
+                    // === 核心去重 ===
+                    // 如果 hash 相同，删除数组里旧的
+                    var oldIdx = -1;
+                    for(var k=0; k<window.allUploadResults.length; k++) {
+                        if (window.allUploadResults[k].hash === res.hash) {
+                            oldIdx = k;
+                            break;
+                        }
+                    }
+                    if (oldIdx !== -1) window.allUploadResults.splice(oldIdx, 1);
+                    
+                    // 加到最前
+                    window.allUploadResults.unshift(res);
+                    
+                    // 保存历史
+                    if (window.saveToHistory) window.saveToHistory(res);
+                } else {
+                    // 失败卡片直接插 DOM，不进数组
+                    var err = createErrorCard(res, file.name);
+                    batchList.insertBefore(err, batchList.firstChild);
+                }
+                
+                window.renderUploadList();
+
+            }, 400);
+
         } catch (e) {
             console.error(e);
-            wrapper.querySelector('.source-badge').innerText = '❌ 失败';
-            wrapper.style.border = '1px solid red';
+            if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
         }
     }
-    function renderSuccessCard(wrapper, data) {
+
+    function createResultCard(data) {
+        var div = document.createElement('div');
+        div.className = 'history-card';
         var all = data.all_results || [{ service: data.service, url: data.url }];
-        var info = wrapper.querySelector('.history-info');
         
-        // 清空旧内容，重新构建
-        info.innerHTML = ''; 
+        var html = 
+            '<div class="history-main-row">' +
+                '<img src="' + data.url + '" class="history-thumb">' +
+                '<div class="history-info">' +
+                    '<div class="history-name-row">' +
+                        '<span class="history-name">' + data.filename + '</span>' +
+                        '<span class="source-badge" style="color:green;background:#ecfdf5">' + 
+                           (all.length > 1 ? all.length+'个源' : data.service) + 
+                        '</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="history-actions">' +
+                    '<button class="btn-mini" onclick="navigator.clipboard.writeText(\''+data.url+'\');alert(\'已复制\')">复制</button>' +
+                    '<button class="btn-mini" onclick="window.open(\''+data.url+'\')">打开</button>' +
+                '</div>' +
+            '</div>';
         
-        var row = document.createElement('div');
-        row.className = 'history-name-row';
-        row.innerHTML = '<span class="history-name">' + data.filename + '</span>';
-        
-        var badge = document.createElement('span');
-        badge.className = 'source-badge';
-        badge.innerText = all.length > 1 ? all.length + '个源' : data.service;
-        badge.style.color = '#22c55e';
-        badge.style.background = '#ecfdf5';
-        row.appendChild(badge);
-        info.appendChild(row);
-
-        // 如果有部分失败，显示红字
-        if (data.failed_list && data.failed_list.length > 0) {
-            var errDiv = document.createElement('div');
-            errDiv.style.color = 'red';
-            errDiv.style.fontSize = '12px';
-            var msg = [];
-            data.failed_list.forEach(function(f){ msg.push(f.service + ': ' + f.error); });
-            errDiv.innerText = '⚠️ ' + msg.join(', ');
-            info.appendChild(errDiv);
-        }
-
-        // 按钮组
-        var actions = document.createElement('div');
-        actions.className = 'history-actions';
-        
-        var btnC = document.createElement('button');
-        btnC.className = 'btn-mini';
-        btnC.innerText = '复制';
-        btnC.onclick = function() { navigator.clipboard.writeText(data.url); alert("已复制"); };
-        
-        var btnO = document.createElement('button');
-        btnO.className = 'btn-mini';
-        btnO.innerText = '打开';
-        btnO.onclick = function() { window.open(data.url); };
-        
-        actions.appendChild(btnC);
-        actions.appendChild(btnO);
-        
-        wrapper.querySelector('.history-main-row').appendChild(actions);
-
-        // 子列表
         if (all.length > 1) {
-            var sub = document.createElement('div');
-            sub.className = 'history-sublist';
-            all.forEach(function(s) {
-                var r = document.createElement('div');
-                r.className = 'sub-row';
-                r.innerHTML = '<span class="sub-tag">'+s.service+'</span><a href="'+s.url+'" class="sub-link" target="_blank">'+s.url+'</a>';
-                sub.appendChild(r);
+            html += '<div class="history-sublist">';
+            all.forEach(function(s){
+                 html += '<div class="sub-row"><span class="sub-tag">'+s.service+'</span><a href="'+s.url+'" class="sub-link" target="_blank">'+s.url+'</a></div>';
             });
-            wrapper.appendChild(sub);
+            html += '</div>';
         }
+        div.innerHTML = html;
+        return div;
     }
 
-    function renderErrorCard(wrapper, res) {
-        var b = wrapper.querySelector('.source-badge');
-        b.innerText = '全部失败';
-        b.style.color = 'red';
-        
-        var errInfo = document.createElement('div');
-        errInfo.style.padding = '10px';
-        errInfo.style.color = 'red';
-        errInfo.style.fontSize = '12px';
-        
-        if (res.failed_list) {
-            res.failed_list.forEach(function(f) {
-                var p = document.createElement('div');
-                p.innerText = '❌ ' + f.service + ': ' + f.error;
-                errInfo.appendChild(p);
-            });
-        } else {
-            errInfo.innerText = res.error || '未知错误';
-        }
-        wrapper.appendChild(errInfo);
+    function createErrorCard(res, fname) {
+        var div = document.createElement('div');
+        div.className = 'history-card';
+        div.style.borderColor = 'red';
+        div.innerHTML = 
+            '<div class="history-main-row">' +
+                '<div class="history-info">' +
+                    '<span class="history-name">' + fname + '</span>' +
+                    '<div style="color:red;font-size:12px;margin-top:5px">上传失败: ' + (res.error||'未知') + '</div>' +
+                '</div>' +
+            '</div>';
+        return div;
     }
+
+    // 暴露的控制方法
+    window.prevUploadPage = function() { 
+        if(window.uploadPage > 1) { window.uploadPage--; window.renderUploadList(); }
+    };
+    window.nextUploadPage = function() { 
+        var max = Math.ceil(window.allUploadResults.length / window.uploadPageSize);
+        if(window.uploadPage < max) { window.uploadPage++; window.renderUploadList(); }
+    };
+    window.changeUploadPageSize = function(v) { 
+        window.uploadPageSize = parseInt(v); 
+        window.uploadPage = 1; 
+        window.renderUploadList(); 
+    };
 });

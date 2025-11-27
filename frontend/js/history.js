@@ -1,5 +1,10 @@
 "use strict";
 
+// 全局分页状态
+window.historyPage = 1;
+window.historyPageSize = 10;
+window.historyFilteredData = [];
+
 // === 核心保存逻辑：合并去重 ===
 window.saveToHistory = function(data) {
     try {
@@ -8,7 +13,6 @@ window.saveToHistory = function(data) {
         if (!Array.isArray(list)) list = [];
 
         var hash = data.hash || null;
-        // 构造本次所有成功的链接列表
         var newLinks = [];
         if (data.all_results && Array.isArray(data.all_results)) {
             newLinks = data.all_results;
@@ -18,7 +22,6 @@ window.saveToHistory = function(data) {
 
         if (!newLinks.length) return;
 
-        // 1. 查找是否有相同 Hash 的旧记录
         var idx = -1;
         if (hash) {
             for (var i = 0; i < list.length; i++) {
@@ -27,17 +30,21 @@ window.saveToHistory = function(data) {
                     break;
                 }
             }
+        } else {
+            for (var j = 0; j < list.length; j++) {
+                if (list[j].url === data.url) {
+                    idx = j;
+                    break;
+                }
+            }
         }
 
         if (idx !== -1) {
-            // === 合并逻辑 ===
             var item = list[idx];
-            // 确保旧记录有 all_results 字段
             if (!item.all_results || !Array.isArray(item.all_results)) {
                 item.all_results = [{ service: item.service, url: item.url }];
             }
 
-            // 遍历新链接，不存在的就加进去
             for (var k = 0; k < newLinks.length; k++) {
                 var link = newLinks[k];
                 var exists = false;
@@ -52,31 +59,29 @@ window.saveToHistory = function(data) {
                 }
             }
             
-            // 更新时间和主信息（顶上来）
             item.time = new Date().toLocaleString();
-            // 移动到最前面
+            item.url = data.url;
+            
             list.splice(idx, 1);
             list.unshift(item);
 
         } else {
-            // === 新增逻辑 ===
             var newItem = {
-                url: newLinks[0].url, // 主链接
+                url: newLinks[0].url,
                 service: newLinks[0].service,
                 filename: data.filename || "未命名",
                 time: new Date().toLocaleString(),
                 hash: hash,
-                all_results: newLinks
+                all_results: newLinks,
+                linkStatus: "unknown"
             };
             list.unshift(newItem);
         }
 
-        // 限制 200 条
-        if (list.length > 200) list = list.slice(0, 200);
+        if (list.length > 500) list = list.slice(0, 500);
 
         localStorage.setItem("uploadHistory", JSON.stringify(list));
 
-        // 如果当前在历史页面，立即刷新显示
         if (typeof renderHistory === 'function') renderHistory();
 
     } catch (e) {
@@ -97,7 +102,9 @@ document.addEventListener("DOMContentLoaded", function () {
     var importInput = document.getElementById("importFileInput");
     var tabHistory = document.getElementById("tab-history");
 
-    // 公开给外部使用
+    var paginationBar = document.getElementById("historyPagination");
+    var pageInfoText = document.getElementById("historyPageInfo");
+
     window.displayHistory = renderHistory;
 
     function renderHistory() {
@@ -108,34 +115,50 @@ document.addEventListener("DOMContentLoaded", function () {
 
         historyList.innerHTML = "";
 
-        if (list.length === 0) {
-            historyList.innerHTML = '<div class="empty-state">暂无历史记录</div>';
+        var filteredList = list.filter(function(item) {
+            if (!keyword) return true;
+             return (item.filename || "").toLowerCase().indexOf(keyword) !== -1 ||
+                    (item.url || "").toLowerCase().indexOf(keyword) !== -1;
+        });
+        
+        window.historyFilteredData = filteredList;
+
+        if (filteredList.length === 0) {
+            historyList.innerHTML = '<div class="empty-state" style="text-align:center;padding:20px;color:#999">暂无历史记录</div>';
+            if(paginationBar) paginationBar.style.display = 'none';
             return;
         }
 
-        list.forEach(function(item) {
-            // 搜索过滤
-            if (keyword && (item.filename || "").toLowerCase().indexOf(keyword) === -1) return;
+        if(paginationBar) paginationBar.style.display = 'flex';
+        
+        var totalPages = Math.ceil(filteredList.length / window.historyPageSize);
+        if (totalPages < 1) totalPages = 1;
+        
+        if (window.historyPage > totalPages) window.historyPage = totalPages;
+        if (window.historyPage < 1) window.historyPage = 1;
 
-            // 准备数据
+        if (pageInfoText) pageInfoText.innerText = window.historyPage + " / " + totalPages;
+
+        var start = (window.historyPage - 1) * window.historyPageSize;
+        var end = start + window.historyPageSize;
+        var pageItems = filteredList.slice(start, end);
+
+        pageItems.forEach(function(item) {
             var all = item.all_results || [{service: item.service, url: item.url}];
             var displayUrl = item.url || (all[0] ? all[0].url : "");
 
-            // --- 创建 DOM 元素 ---
             var card = document.createElement("div");
             card.className = "history-card";
+            card.setAttribute("data-url", displayUrl); 
 
-            // 1. 主行
             var mainRow = document.createElement("div");
             mainRow.className = "history-main-row";
             
-            // 左图
             var img = document.createElement("img");
             img.className = "history-thumb";
             img.src = displayUrl;
             img.onerror = function() { this.classList.add("broken"); };
 
-            // 中文
             var infoDiv = document.createElement("div");
             infoDiv.className = "history-info";
             
@@ -145,6 +168,7 @@ document.addEventListener("DOMContentLoaded", function () {
             var nameSpan = document.createElement("span");
             nameSpan.className = "history-name";
             nameSpan.textContent = item.filename;
+            nameSpan.title = item.filename;
             nameRow.appendChild(nameSpan);
 
             if (all.length > 1) {
@@ -152,6 +176,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 badge.className = "source-badge";
                 badge.textContent = all.length + "个源";
                 nameRow.appendChild(badge);
+            } else {
+                var badgeS = document.createElement("span");
+                badgeS.className = "source-badge";
+                badgeS.textContent = item.service;
+                nameRow.appendChild(badgeS);
             }
 
             var meta = document.createElement("div");
@@ -161,7 +190,6 @@ document.addEventListener("DOMContentLoaded", function () {
             infoDiv.appendChild(nameRow);
             infoDiv.appendChild(meta);
 
-            // 右按钮
             var actions = document.createElement("div");
             actions.className = "history-actions";
 
@@ -169,8 +197,18 @@ document.addEventListener("DOMContentLoaded", function () {
             btnCopy.className = "btn-mini";
             btnCopy.textContent = "复制";
             btnCopy.onclick = function() {
-                navigator.clipboard.writeText(displayUrl);
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(displayUrl);
+                } else {
+                    var ta = document.createElement("textarea");
+                    ta.value = displayUrl;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(ta);
+                }
                 if(window.showToast) showToast("已复制");
+                else alert("已复制");
             };
 
             var btnOpen = document.createElement("button");
@@ -183,7 +221,6 @@ document.addEventListener("DOMContentLoaded", function () {
             actions.appendChild(btnCopy);
             actions.appendChild(btnOpen);
 
-            // 下拉箭头
             if (all.length > 1) {
                 var btnToggle = document.createElement("button");
                 btnToggle.className = "btn-mini toggle-btn";
@@ -206,7 +243,6 @@ document.addEventListener("DOMContentLoaded", function () {
             mainRow.appendChild(actions);
             card.appendChild(mainRow);
 
-            // 2. 子列表
             if (all.length > 1) {
                 var subList = document.createElement("div");
                 subList.className = "history-sublist";
@@ -216,7 +252,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     var row = document.createElement("div");
                     row.className = "sub-row";
                     
-                    // 必须使用 textContent 防止 XSS，千万别用 innerHTML 拼接长字符串
                     var tag = document.createElement("span");
                     tag.className = "sub-tag";
                     tag.textContent = sub.service;
@@ -230,6 +265,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     var copySub = document.createElement("button");
                     copySub.className = "btn-text-sm";
                     copySub.textContent = "复制";
+                    copySub.style.marginLeft = "auto";
                     copySub.onclick = function() {
                         navigator.clipboard.writeText(sub.url);
                         if(window.showToast) showToast("已复制 " + sub.service);
@@ -247,8 +283,29 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // 绑定事件
-    if (searchInput) searchInput.oninput = renderHistory;
+    window.prevHistoryPage = function() {
+        if (window.historyPage > 1) {
+            window.historyPage--;
+            renderHistory();
+        }
+    };
+    window.nextHistoryPage = function() {
+        var max = Math.ceil(window.historyFilteredData.length / window.historyPageSize);
+        if (window.historyPage < max) {
+            window.historyPage++;
+            renderHistory();
+        }
+    };
+    window.changeHistoryPageSize = function(val) {
+        window.historyPageSize = parseInt(val);
+        window.historyPage = 1;
+        renderHistory();
+    };
+
+    if (searchInput) searchInput.oninput = function() {
+        window.historyPage = 1;
+        renderHistory();
+    };
     if (tabHistory) tabHistory.onclick = renderHistory;
     
     if (clearBtn) {
@@ -260,27 +317,26 @@ document.addEventListener("DOMContentLoaded", function () {
         };
     }
 
-    // 导出功能（修复变量名防截断）
+    // 导出功能：使用 data URI 方案，完全不用那个构造函数
     if (exportBtn) {
         exportBtn.onclick = function() {
-            var list = JSON.parse(localStorage.getItem("uploadHistory") || "[]");
+            var raw = localStorage.getItem("uploadHistory");
+            var list = raw ? JSON.parse(raw) : [];
             if (!list.length) {
                 alert("无记录");
                 return;
             }
-            var str = JSON.stringify(list, null, 2);
-            var arr = [];
-            arr.push(str);
-            var b = new Blob(arr, {type: "application/json"});
-            var url = URL.createObjectURL(b);
+            var jsonStr = JSON.stringify(list, null, 2);
+            var dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(jsonStr);
             var a = document.createElement("a");
-            a.href = url;
+            a.href = dataUri;
             a.download = "history_backup.json";
+            document.body.appendChild(a);
             a.click();
+            document.body.removeChild(a);
         };
     }
     
-    // 导入功能
     if (importBtn && importInput) {
         importBtn.onclick = function() { importInput.click(); };
         importInput.onchange = function() {
@@ -300,6 +356,5 @@ document.addEventListener("DOMContentLoaded", function () {
         };
     }
 
-    // 初始渲染
     renderHistory();
 });
