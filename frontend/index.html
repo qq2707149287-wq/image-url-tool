@@ -37,7 +37,7 @@
                 </div>
             </div>
 
-            <!-- 压缩选项（已修复点击文字问题） -->
+            <!-- 压缩选项 -->
             <div class="compress-options">
                 <span>压缩等级: </span>
                 <label style="margin-right: 8px;">
@@ -61,8 +61,33 @@
             </div>
 
             <input type="file" id="fileInput" accept="image/*" multiple hidden>
+            
+            <!-- 批量列表区域 -->
             <div id="uploadBatchList" class="batch-list"></div>
 
+            <!-- 调整顺序：最新上传结果放在翻页栏上方 -->
+            <div id="uploadResult" class="result-box" style="display:none; margin-top: 20px; margin-bottom: 20px;">
+                <h3>最新上传结果</h3>
+                <span id="uploadServiceBadge" class="service-badge"></span>
+                <div class="url-box">
+                    <a id="uploadResultUrl" target="_blank" href="#"></a>
+                </div>
+                <div class="action-buttons" style="margin-top: 10px; display:flex; gap:10px;">
+                    <button class="copy-btn" id="uploadCopyBtn">复制链接</button>
+                    <button class="copy-btn" id="uploadOpenBtn">打开图片</button>
+                </div>
+
+                <!-- 新增：上传页重命名 -->
+                <div class="rename-box" style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+                    <span>图片名称:</span>
+                    <input type="text" id="uploadFilenameInput" class="input-text" style="flex:1; min-width:0;">
+                    <button class="btn-mini" id="uploadRenameSaveBtn">保存名称</button>
+                </div>
+
+                <div id="uploadImageInfo" class="info-grid" style="margin-top: 15px;"></div>
+            </div>
+
+            <!-- 翻页栏 -->
             <div id="uploadPagination" class="pagination-bar" style="display:none; margin-top:15px; padding:10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; justify-content:space-between; align-items:center;">
                 <div>
                     <span style="font-size:13px; color:var(--text-secondary);">每页显示:</span>
@@ -78,29 +103,6 @@
                     <span id="uploadPageInfo" style="font-size:13px; font-weight:bold;">1/1</span>
                     <button class="btn-mini" onclick="window.nextUploadPage()">下一页</button>
                 </div>
-            </div>
-
-            <!-- 最新上传结果 + 重命名 -->
-            <div id="uploadResult" class="result-box" style="display:none; margin-top: 20px;">
-                <h3>最新上传结果</h3>
-                <span id="uploadServiceBadge" class="service-badge"></span>
-                <div class="url-box">
-                    <a id="uploadResultUrl" target="_blank" href="#"></a>
-                </div>
-                <div class="action-buttons" style="margin-top: 10px; display:flex; gap:10px;">
-                    <button class="copy-btn" id="uploadCopyBtn">复制链接</button>
-                    <button class="copy-btn" id="uploadQrBtn">二维码</button>
-                    <button class="copy-btn" id="uploadOpenBtn">打开图片</button>
-                </div>
-
-                <!-- 新增：上传页重命名 -->
-                <div class="rename-box" style="margin-top:10px; display:flex; gap:8px; align-items:center;">
-                    <span>图片名称:</span>
-                    <input type="text" id="uploadFilenameInput" class="input-text" style="flex:1; min-width:0;">
-                    <button class="btn-mini" id="uploadRenameSaveBtn">保存名称</button>
-                </div>
-
-                <div id="uploadImageInfo" class="info-grid" style="margin-top: 15px;"></div>
             </div>
         </div>
         
@@ -130,7 +132,6 @@
                 <div class="url-box"><a id="pasteResultUrl" target="_blank"></a></div>
                 <div class="action-buttons">
                     <button class="copy-btn" id="pasteCopyBtn">复制</button>
-                    <button class="copy-btn" id="pasteQrBtn">二维码</button>
                     <button class="copy-btn" id="pasteOpenBtn">打开</button>
                 </div>
 
@@ -184,14 +185,12 @@
 
     <div id="toast-container" class="toast-container"></div>
     
-    <script src="https://cdn.staticfile.org/qrcodejs/1.0.0/qrcode.min.js"></script>
-
     <script src="/static/js/ui.js" defer></script>
     <script src="/static/js/core.js" defer></script>
     <script src="/static/js/upload.js" defer></script>
     <script src="/static/js/paste.js" defer></script>
     <script src="/static/js/history.js" defer></script>
     <script src="/static/js/link_check.js" defer></script>
-    <script src="/static/js/qr.js" defer></script>
+    <!-- qr.js 已被移除 -->
 </body>
 </html>

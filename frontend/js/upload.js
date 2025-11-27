@@ -6,12 +6,10 @@ window.uploadPageSize = 10;
 window.lastUploadResultUrl = null;
 
 // [新增工具函数] 补全 URL
-// 如果后端返回的是 /mycloud/xxx，自动补全为 http://domain.com/mycloud/xxx
 function getFullUrl(url) {
     if (!url) return "";
-    if (url.startsWith("http")) return url; // 已经是完整的
+    if (url.startsWith("http")) return url; 
     if (url.startsWith("/")) {
-        // 补全当前域名
         return window.location.origin + url;
     }
     return url;
@@ -21,7 +19,6 @@ function getFullUrl(url) {
 function getDefaultNameFromResult(res) {
     if (res && res.hash) return res.hash;
     
-    // 解析 URL 文件名
     var fullUrl = getFullUrl(res.url);
     if (fullUrl) {
         try {
@@ -50,13 +47,13 @@ document.addEventListener('DOMContentLoaded', function() {
         uploadRenameBtn.onclick = function () {
             var newName = uploadNameInput.value.trim();
             if (!newName) {
-                alert("名称不能为空");
+                // 使用 Toast 替代 alert
+                if (window.showToast) window.showToast("名称不能为空", "warning");
                 return;
             }
             if (window.lastUploadResultUrl && window.renameHistoryByUrl) {
-                // 注意：重命名时使用的是补全后的 URL
                 window.renameHistoryByUrl(getFullUrl(window.lastUploadResultUrl), newName);
-                if (window.showToast) window.showToast("名称已更新");
+                if (window.showToast) window.showToast("名称已更新", "success");
             }
         };
     }
@@ -138,10 +135,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             var formData = new FormData();
             formData.append('file', file);
-            var nodes = document.querySelectorAll('#uploadServiceSelector input:checked');
-            var svcs = [];
-            for (var i = 0; i < nodes.length; i++) svcs.push(nodes[i].value);
-            if (svcs.length === 0) svcs.push('myminio');
+            var svcs = ['myminio']; // 强制默认 myminio
             formData.append('services', svcs.join(','));
 
             bar.style.width = '50%';
@@ -153,7 +147,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
 
                 if (res.success) {
-                    // 关键修改：拿到结果后，先把 URL 转成完整的
                     res.url = getFullUrl(res.url);
                     if(res.all_results) {
                         res.all_results.forEach(function(sub) {
@@ -170,7 +163,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     if (oldIdx !== -1) window.allUploadResults.splice(oldIdx, 1);
                     
-                    // 生成默认名称
                     var displayName = getDefaultNameFromResult(res);
                     res.filename = displayName;
 
@@ -181,23 +173,22 @@ document.addEventListener('DOMContentLoaded', function() {
                         uploadNameInput.value = displayName;
                     }
                     
-                    // 更新单次上传结果区域（如果有的话）
+                    // 更新单次上传结果区域
                     var singleUrlLink = document.getElementById('uploadResultUrl');
                     if (singleUrlLink) {
-                        singleUrlLink.textContent = res.url; // 显示完整 URL
+                        singleUrlLink.textContent = res.url; 
                         singleUrlLink.href = res.url;
                         document.getElementById('uploadResult').style.display = 'block';
+                        
+                        // 移除 alert，改用 Toast
                         document.getElementById('uploadCopyBtn').onclick = function() {
                             navigator.clipboard.writeText(res.url);
-                            alert('已复制完整链接');
+                            if (window.showToast) window.showToast('已复制完整链接', 'success');
                         };
                         document.getElementById('uploadOpenBtn').onclick = function() {
                             window.open(res.url, '_blank');
                         };
-                        // 二维码如果是单独函数生成的，也要传完整 URL
-                        document.getElementById('uploadQrBtn').onclick = function() {
-                            if(window.showQrForUrl) window.showQrForUrl(res.url, '上传图片');
-                        };
+                        // 移除二维码绑定
                     }
 
                     if (window.saveToHistory) window.saveToHistory(res);
@@ -221,9 +212,9 @@ document.addEventListener('DOMContentLoaded', function() {
         var all = data.all_results || [{ service: data.service, url: data.url }];
         
         var name = getDefaultNameFromResult(data);
-        // 确保显示用的 URL 是完整的
         var displayUrl = getFullUrl(data.url);
 
+        // 将内联的 alert 改为 window.showToast
         var html = 
             '<div class="history-main-row">' +
                 '<img src="' + displayUrl + '" class="history-thumb">' +
@@ -236,7 +227,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     '</div>' +
                 '</div>' +
                 '<div class="history-actions">' +
-                    '<button class="btn-mini" onclick="navigator.clipboard.writeText(\'' + displayUrl + '\');alert(\'已复制\')">复制</button>' +
+                    '<button class="btn-mini" onclick="navigator.clipboard.writeText(\'' + displayUrl + '\'); if(window.showToast) window.showToast(\'已复制\', \'success\');">复制</button>' +
                     '<button class="btn-mini" onclick="window.open(\'' + displayUrl + '\')">打开</button>' +
                 '</div>' +
             '</div>';

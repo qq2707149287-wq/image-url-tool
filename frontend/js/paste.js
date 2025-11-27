@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var serviceBadge    = document.getElementById('pasteServiceBadge');
     var resultLinkEl    = document.getElementById('pasteResultUrl');
     var copyBtn         = document.getElementById('pasteCopyBtn');
-    var qrBtn           = document.getElementById('pasteQrBtn');
+    // 二维码按钮已删除，不需要获取 qrBtn
     var openBtn         = document.getElementById('pasteOpenBtn');
     var infoBox         = document.getElementById('pasteImageInfo');
 
@@ -50,12 +50,12 @@ document.addEventListener('DOMContentLoaded', function () {
         renameBtn.onclick = function () {
             var newName = nameInput.value.trim();
             if (!newName) {
-                alert("名称不能为空");
+                if (window.showToast) window.showToast("名称不能为空", "warning");
                 return;
             }
             if (window.lastPasteUrl && window.renameHistoryByUrl) {
                 window.renameHistoryByUrl(getFullUrl(window.lastPasteUrl), newName);
-                if (window.showToast) window.showToast("名称已更新");
+                if (window.showToast) window.showToast("名称已更新", "success");
             }
         };
     }
@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function copyText(text) {
-        var full = getFullUrl(text); // 确保复制的是完整 URL
+        var full = getFullUrl(text); 
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(full);
         } else {
@@ -94,19 +94,17 @@ document.addEventListener('DOMContentLoaded', function () {
             document.execCommand('copy');
             document.body.removeChild(ta);
         }
+        // 只有 Toast，没有 alert
         if (window.showToast) {
-            window.showToast('已复制链接');
-        } else {
-            alert('已复制链接');
+            window.showToast('已复制链接', 'success');
         }
     }
 
     function renderUploadResult(data) {
         if (!data || !data.url) return;
         
-        // 核心改动：统一补全 URL
         var fullUrl = getFullUrl(data.url);
-        data.url = fullUrl; // 修正数据源
+        data.url = fullUrl; 
         if (data.all_results) {
             data.all_results.forEach(function(item) { item.url = getFullUrl(item.url); });
         }
@@ -304,13 +302,6 @@ document.addEventListener('DOMContentLoaded', function () {
         openBtn.addEventListener('click', function () {
             if (resultLinkEl && resultLinkEl.href) {
                 window.open(resultLinkEl.href, '_blank');
-            }
-        });
-    }
-    if (qrBtn) {
-        qrBtn.addEventListener('click', function () {
-            if (resultLinkEl && resultLinkEl.href && window.showQrForUrl) {
-                window.showQrForUrl(resultLinkEl.href, '粘贴图片');
             }
         });
     }

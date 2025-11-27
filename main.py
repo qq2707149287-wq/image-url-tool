@@ -10,7 +10,13 @@ import hashlib
 import boto3
 from botocore.client import Config
 import traceback
-import mimetypes  # 核心修复库
+import mimetypes 
+
+# === 0. 核心修复：手动教 Python 认识 AVIF ===
+# 因为很多 Linux 容器默认不认识这个新格式，必须手动注册
+mimetypes.add_type("image/avif", ".avif")
+mimetypes.add_type("image/heic", ".heic")
+mimetypes.add_type("image/webp", ".webp")
 
 # === 1. 获取本机IP地址 (保留原功能) ===
 def get_local_ip():
@@ -84,10 +90,14 @@ def upload_to_minio(data: bytes, name: str, fhash: str):
         ext = os.path.splitext(name)[1] or ".jpg"
         key = f"{fhash}{ext}"
         
-        # [优化] 上传时尽量猜对类型，但这一步不是决定性的
+        # [优化] 上传时尽量猜对类型
         content_type, _ = mimetypes.guess_type(name)
         if not content_type:
-            content_type = "application/octet-stream"
+            # 针对 AVIF 的额外补丁
+            if name.lower().endswith('.avif'):
+                content_type = 'image/avif'
+            else:
+                content_type = "application/octet-stream"
 
         s3.put_object(
             Bucket=MINIO_BUCKET_NAME,
@@ -131,7 +141,6 @@ async def upload_endpoint(
 
         if not res["success"]:
             print("❌ 上传失败")
-            # 保留 failed_list 结构，防止前端解析报错
             return JSONResponse({
                 "success": False,
                 "error": res.get("error", "上传失败"),
@@ -139,14 +148,13 @@ async def upload_endpoint(
             })
         
         print("✨ 任务完成")
-        # 保留完整的 JSON 结构
         return JSONResponse({
             "success": True,
             "filename": file.filename,
             "hash": fhash,
             "url": res["url"],
             "service": res["service"],
-            "all_results": [res], # 保留 all_results，前端历史记录依赖它
+            "all_results": [res], 
             "failed_list": [],
             "width": info["width"],
             "height": info["height"],
@@ -160,7 +168,7 @@ async def upload_endpoint(
             content={"success": False, "error": str(e)}
         )
 
-# === 7. 图片代理接口 (这是本次唯一修改核心逻辑的地方) ===
+# === 7. 图片代理接口 (针对 AVIF 做了增强) ===
 @app.get("/mycloud/{object_name:path}")
 def get_mycloud_image(object_name: str):
     """
@@ -171,21 +179,25 @@ def get_mycloud_image(object_name: str):
         obj = s3.get_object(Bucket=MINIO_BUCKET_NAME, Key=object_name)
         body = obj["Body"]
         
-        # --- 核心修复开始 ---
-        # 1. 强制猜测类型，不管 MinIO 里存的是乱码还是 application/octet-stream
+        # 1. 尝试猜测类型 (因为开头手动 add_type 了，现在应该能认出 avif)
         content_type, _ = mimetypes.guess_type(object_name)
         
-        # 2. 如果没猜出来（比如没后缀），尝试用 MinIO 的数据，或者默认给 jpeg
+        # 2. 双重保险：如果系统还是笨笨的，我们人工指定
         if not content_type:
-            content_type = obj.get("ContentType", "image/jpeg")
+            lower_name = object_name.lower()
+            if lower_name.endswith(".avif"):
+                content_type = "image/avif"
+            elif lower_name.endswith(".webp"):
+                content_type = "image/webp"
+            else:
+                content_type = obj.get("ContentType", "image/jpeg")
             
         # 3. 强制设置响应头，禁止下载，强制预览
         headers = {
-            "Content-Disposition": "inline",  # 只要把这个设为 inline，浏览器就会尝试渲染
-            "Content-Type": content_type,     # 明确告诉浏览器这是图片
-            "Cache-Control": "public, max-age=31536000" # 加上缓存，让加载更快
+            "Content-Disposition": "inline",
+            "Content-Type": content_type,
+            "Cache-Control": "public, max-age=31536000"
         }
-        # --- 核心修复结束 ---
 
         return StreamingResponse(body, media_type=content_type, headers=headers)
     except Exception as e:
