@@ -2,15 +2,22 @@
 
 window.lastPasteUrl = null;
 
-// 命名规则同上传：hash > URL 路径 > 时间戳
+// 补全 URL 工具
+function getFullUrl(url) {
+    if (!url) return "";
+    if (url.startsWith("http")) return url;
+    if (url.startsWith("/")) return window.location.origin + url;
+    return url;
+}
+
+// 命名规则
 function getDefaultNameFromResultForPaste(res) {
-    if (res && res.hash) {
-        return res.hash;
-    }
-    var url = res && res.url ? res.url : "";
-    if (url) {
+    if (res && res.hash) return res.hash;
+    
+    var fullUrl = getFullUrl(res.url);
+    if (fullUrl) {
         try {
-            var u = new URL(url, window.location.origin);
+            var u = new URL(fullUrl);
             var path = u.pathname || "";
             var segs = path.split("/").filter(Boolean);
             if (segs.length) {
@@ -47,7 +54,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
             if (window.lastPasteUrl && window.renameHistoryByUrl) {
-                window.renameHistoryByUrl(window.lastPasteUrl, newName);
+                window.renameHistoryByUrl(getFullUrl(window.lastPasteUrl), newName);
                 if (window.showToast) window.showToast("名称已更新");
             }
         };
@@ -76,11 +83,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function copyText(text) {
+        var full = getFullUrl(text); // 确保复制的是完整 URL
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text);
+            navigator.clipboard.writeText(full);
         } else {
             var ta = document.createElement('textarea');
-            ta.value = text;
+            ta.value = full;
             document.body.appendChild(ta);
             ta.select();
             document.execCommand('copy');
@@ -93,21 +101,26 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // 统一渲染上传结果 + 写入历史
     function renderUploadResult(data) {
         if (!data || !data.url) return;
-        var url = data.url;
+        
+        // 核心改动：统一补全 URL
+        var fullUrl = getFullUrl(data.url);
+        data.url = fullUrl; // 修正数据源
+        if (data.all_results) {
+            data.all_results.forEach(function(item) { item.url = getFullUrl(item.url); });
+        }
 
-        window.lastPasteUrl = url;
+        window.lastPasteUrl = fullUrl;
 
         var displayName = getDefaultNameFromResultForPaste(data);
         data.filename = displayName;
 
-        setPreview(url);
+        setPreview(fullUrl);
         if (serviceBadge) serviceBadge.textContent = data.service || 'MyCloud';
         if (resultLinkEl) {
-            resultLinkEl.textContent = url;
-            resultLinkEl.href = url;
+            resultLinkEl.textContent = fullUrl;
+            resultLinkEl.href = fullUrl;
         }
 
         if (infoBox) {
@@ -135,13 +148,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (window.saveToHistory) {
             window.saveToHistory({
-                url: url,
+                url: fullUrl,
                 service: data.service || 'MyCloud',
                 filename: displayName,
                 hash: data.hash || null,
                 all_results: data.all_results || [{
                     service: data.service || 'MyCloud',
-                    url: url
+                    url: fullUrl
                 }],
                 width: data.width,
                 height: data.height,
@@ -282,8 +295,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (copyBtn) {
         copyBtn.addEventListener('click', function () {
-            if (resultLinkEl && resultLinkEl.href) {
-                copyText(resultLinkEl.href);
+            if (resultLinkEl.textContent) {
+                copyText(resultLinkEl.textContent);
             }
         });
     }

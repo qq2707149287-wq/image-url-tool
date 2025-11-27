@@ -5,29 +5,36 @@ window.uploadPage = 1;
 window.uploadPageSize = 10;
 window.lastUploadResultUrl = null;
 
-// 统一命名规则：
-// 1. 有 hash 就用 hash
-// 2. 否则从 URL 里取最后一段（去掉后缀）
-// 3. 都没有就用时间戳
-function getDefaultNameFromResult(res) {
-    if (res && res.hash) {
-        return res.hash;
+// [新增工具函数] 补全 URL
+// 如果后端返回的是 /mycloud/xxx，自动补全为 http://domain.com/mycloud/xxx
+function getFullUrl(url) {
+    if (!url) return "";
+    if (url.startsWith("http")) return url; // 已经是完整的
+    if (url.startsWith("/")) {
+        // 补全当前域名
+        return window.location.origin + url;
     }
-    var url = res && res.url ? res.url : "";
-    if (url) {
+    return url;
+}
+
+// 统一命名规则
+function getDefaultNameFromResult(res) {
+    if (res && res.hash) return res.hash;
+    
+    // 解析 URL 文件名
+    var fullUrl = getFullUrl(res.url);
+    if (fullUrl) {
         try {
-            var u = new URL(url, window.location.origin);
+            var u = new URL(fullUrl);
             var path = u.pathname || "";
             var segs = path.split("/").filter(Boolean);
             if (segs.length) {
-                var last = segs[segs.length - 1]; // xxx.png
+                var last = segs[segs.length - 1];
                 var dot = last.lastIndexOf(".");
                 if (dot > 0) last = last.substring(0, dot);
                 if (last) return last;
             }
-        } catch (e) {
-            // 忽略解析错误
-        }
+        } catch (e) {}
     }
     return "img_" + Date.now();
 }
@@ -47,7 +54,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             if (window.lastUploadResultUrl && window.renameHistoryByUrl) {
-                window.renameHistoryByUrl(window.lastUploadResultUrl, newName);
+                // 注意：重命名时使用的是补全后的 URL
+                window.renameHistoryByUrl(getFullUrl(window.lastUploadResultUrl), newName);
                 if (window.showToast) window.showToast("名称已更新");
             }
         };
@@ -113,10 +121,10 @@ document.addEventListener('DOMContentLoaded', function() {
         wrapper.className = 'history-card temp-card';
         wrapper.style.opacity = '0.8';
         
-        var url = URL.createObjectURL(file);
+        var localPreviewUrl = URL.createObjectURL(file);
         wrapper.innerHTML = 
             '<div class="history-main-row">' +
-                '<img src="' + url + '" class="history-thumb">' +
+                '<img src="' + localPreviewUrl + '" class="history-thumb">' +
                 '<div class="history-info">' +
                     '<span class="history-name">' + file.name + '</span>' +
                     '<span class="source-badge">⏳ 上传中...</span>' +
@@ -145,6 +153,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
 
                 if (res.success) {
+                    // 关键修改：拿到结果后，先把 URL 转成完整的
+                    res.url = getFullUrl(res.url);
+                    if(res.all_results) {
+                        res.all_results.forEach(function(sub) {
+                            sub.url = getFullUrl(sub.url);
+                        });
+                    }
+
                     var oldIdx = -1;
                     for (var k = 0; k < window.allUploadResults.length; k++) {
                         if (window.allUploadResults[k].hash === res.hash) {
@@ -154,16 +170,34 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     if (oldIdx !== -1) window.allUploadResults.splice(oldIdx, 1);
                     
-                    // 生成默认显示名称（hash / URL 里的长串）
+                    // 生成默认名称
                     var displayName = getDefaultNameFromResult(res);
                     res.filename = displayName;
 
                     window.allUploadResults.unshift(res);
-
                     window.lastUploadResultUrl = res.url;
 
                     if (uploadNameInput) {
                         uploadNameInput.value = displayName;
+                    }
+                    
+                    // 更新单次上传结果区域（如果有的话）
+                    var singleUrlLink = document.getElementById('uploadResultUrl');
+                    if (singleUrlLink) {
+                        singleUrlLink.textContent = res.url; // 显示完整 URL
+                        singleUrlLink.href = res.url;
+                        document.getElementById('uploadResult').style.display = 'block';
+                        document.getElementById('uploadCopyBtn').onclick = function() {
+                            navigator.clipboard.writeText(res.url);
+                            alert('已复制完整链接');
+                        };
+                        document.getElementById('uploadOpenBtn').onclick = function() {
+                            window.open(res.url, '_blank');
+                        };
+                        // 二维码如果是单独函数生成的，也要传完整 URL
+                        document.getElementById('uploadQrBtn').onclick = function() {
+                            if(window.showQrForUrl) window.showQrForUrl(res.url, '上传图片');
+                        };
                     }
 
                     if (window.saveToHistory) window.saveToHistory(res);
@@ -187,10 +221,12 @@ document.addEventListener('DOMContentLoaded', function() {
         var all = data.all_results || [{ service: data.service, url: data.url }];
         
         var name = getDefaultNameFromResult(data);
+        // 确保显示用的 URL 是完整的
+        var displayUrl = getFullUrl(data.url);
 
         var html = 
             '<div class="history-main-row">' +
-                '<img src="' + data.url + '" class="history-thumb">' +
+                '<img src="' + displayUrl + '" class="history-thumb">' +
                 '<div class="history-info">' +
                     '<div class="history-name-row">' +
                         '<span class="history-name">' + name + '</span>' +
@@ -200,19 +236,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     '</div>' +
                 '</div>' +
                 '<div class="history-actions">' +
-                    '<button class="btn-mini" onclick="navigator.clipboard.writeText(\'' + data.url + '\');alert(\'已复制\')">复制</button>' +
-                    '<button class="btn-mini" onclick="window.open(\'' + data.url + '\')">打开</button>' +
+                    '<button class="btn-mini" onclick="navigator.clipboard.writeText(\'' + displayUrl + '\');alert(\'已复制\')">复制</button>' +
+                    '<button class="btn-mini" onclick="window.open(\'' + displayUrl + '\')">打开</button>' +
                 '</div>' +
             '</div>';
         
-        if (all.length > 1) {
-            html += '<div class="history-sublist">';
-            for (var i = 0; i < all.length; i++) {
-                var s = all[i];
-                html += '<div class="sub-row"><span class="sub-tag">' + s.service + '</span><a href="' + s.url + '" class="sub-link" target="_blank">' + s.url + '</a></div>';
-            }
-            html += '</div>';
-        }
         div.innerHTML = html;
         return div;
     }
