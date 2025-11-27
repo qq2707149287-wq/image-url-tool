@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>图片URL获取工具</title>
-    <!-- 路径修复：你的 main.py 挂载了 /static，所以必须加这个前缀 -->
+    <title>私有云图床工具</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>图片URL获取工具</h1>
-            <p class="subtitle">多图床自动切换 · 永久存储 · 批量处理</p>
+            <h1>私有云图床</h1>
+            <p class="subtitle">MyCloud 专用 · 永久存储 · 批量处理</p>
             <div class="header-tools">
                 <button class="btn-ghost" id="themeToggle">🌙 深色模式</button>
             </div>
@@ -30,30 +29,31 @@
         <div id="content-upload" class="tab-content active">
             <div id="uploadArea" class="upload-area">
                 <p>点击或拖拽多张图片到这里</p>
-                <p class="hint">支持 JPG / PNG / GIF / WebP (自动去重)</p>
+                <p class="hint">所有图片统一上传到 MyCloud</p>
             </div>
 
-            <!-- 核心功能区：图床选择 -->
-            <div class="service-selector" id="uploadServiceSelector">
-                <p class="selector-title">选择图床 (支持多选/自动切换):</p>
+            <!-- 这里原来是多图床选择，现在改为“隐藏但保留结构” -->
+            <div class="service-selector" id="uploadServiceSelector" style="display:none;">
+                <p class="selector-title">上传目标（仅 MyCloud 有效）</p>
                 <div class="checkbox-group">
-                    <label><input type="checkbox" value="myminio" checked> MyCloud <span class="tag-hot" style="background:#e0f2fe; color:#0284c7; border-color:#bae6fd;">自建</span></label>
-                    <label><input type="checkbox" value="imgbb" checked> ImgBB <span class="tag-hot">稳</span></label>
-                    <label><input type="checkbox" value="catbox" checked> Catbox <span class="tag-hot">推</span></label>
-                    <label><input type="checkbox" value="imagekit"> ImageKit</label>
-                    <label><input type="checkbox" value="uguu"> Uguu</label>
-                    <label><input type="checkbox" value="pomf"> Pomf</label>
-                    <label><input type="checkbox" value="0x0"> 0x0</label>
+                    <!-- 只保留 myminio 这个输入，让 upload.js 还能读取到 -->
+                    <label><input type="checkbox" value="myminio" checked> MyCloud</label>
                 </div>
             </div>
 
-            <!-- 核心功能区：压缩与格式 -->
+            <!-- 压缩和格式选项（必须保留，否则相关 JS 会找不到控件） -->
             <div class="compress-options">
-                <label>压缩等级: 
+                <span>压缩等级: </span>
+                <label style="margin-right: 8px;">
                     <input type="radio" name="compressMode" value="none" checked> 原图
+                </label>
+                <label style="margin-right: 8px;">
                     <input type="radio" name="compressMode" value="medium"> 中等
+                </label>
+                <label>
                     <input type="radio" name="compressMode" value="high"> 强力
                 </label>
+
                 <label style="margin-left: 20px;">转换格式: 
                     <select id="outputFormatSelect">
                         <option value="auto">保持原样</option>
@@ -66,10 +66,10 @@
 
             <input type="file" id="fileInput" accept="image/*" multiple hidden>
             
-            <!-- 批量上传进度列表 -->
+            <!-- 批量上传进度 / 结果列表 -->
             <div id="uploadBatchList" class="batch-list"></div>
 
-            <!-- [新增] 上传列表分页控件 -->
+            <!-- 上传列表分页控件 -->
             <div id="uploadPagination" class="pagination-bar" style="display:none; margin-top:15px; padding:10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; justify-content:space-between; align-items:center;">
                 <div>
                     <span style="font-size:13px; color:var(--text-secondary);">每页显示:</span>
@@ -87,7 +87,7 @@
                 </div>
             </div>
 
-            <!-- 单张/最后一张结果 -->
+            <!-- 单张/最后一张上传结果（很多 JS 依赖这些 id，必须恢复） -->
             <div id="uploadResult" class="result-box" style="display:none; margin-top: 20px;">
                 <h3>最新上传结果</h3>
                 <span id="uploadServiceBadge" class="service-badge"></span>
@@ -111,12 +111,11 @@
                 <p>Ctrl + V 在此处粘贴图片</p>
             </div>
 
-            <div class="service-selector" id="pasteServiceSelector">
-                <p class="selector-title">上传到:</p>
+            <!-- 粘贴页的图床选择同样隐藏，只留下 myminio -->
+            <div class="service-selector" id="pasteServiceSelector" style="display:none;">
+                <p class="selector-title">上传目标（仅 MyCloud 有效）</p>
                 <div class="checkbox-group">
                     <label><input type="checkbox" value="myminio" checked> MyCloud</label>
-                    <label><input type="checkbox" value="catbox" checked> Catbox</label>
-                    <label><input type="checkbox" value="imgbb"> ImgBB</label>
                 </div>
             </div>
 
@@ -160,7 +159,7 @@
             
             <div id="historyList"></div>
 
-            <!-- [新增] 历史记录分页控件 -->
+            <!-- 历史记录分页控件 -->
             <div id="historyPagination" class="pagination-bar" style="display:none; margin-top:15px; padding:10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; justify-content:space-between; align-items:center;">
                 <div>
                     <span style="font-size:13px; color:var(--text-secondary);">每页显示:</span>
@@ -183,10 +182,10 @@
     <!-- 全局组件 -->
     <div id="toast-container" class="toast-container"></div>
     
-    <!-- 第三方库：使用 CDN 解决丢失问题 -->
+    <!-- 第三方库 -->
     <script src="https://cdn.staticfile.org/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-    <!-- 本地逻辑：全部使用 /static/ 前缀，解决路径错误 -->
+    <!-- 本地逻辑 -->
     <script src="/static/js/ui.js" defer></script>
     <script src="/static/js/core.js" defer></script>
     <script src="/static/js/upload.js" defer></script>
