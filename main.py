@@ -10,6 +10,7 @@ import hashlib
 import boto3
 from botocore.client import Config
 import traceback
+import mimetypes # 引入这个库来准确判断文件类型
 
 # === 1. 获取本机IP地址 ===
 def get_local_ip():
@@ -29,18 +30,8 @@ async def lifespan(app: FastAPI):
     port = 8000
 
     print("\n" + "="*60)
-    print(f"✅ 服务器启动成功！ (Host IP: {local_ip})")
-    print("="*60)
-    print("📍 访问地址:")
-    print(f"   • http://localhost:{port}")
-    print(f"   • http://{local_ip}:{port}")
-    print("")
-    print("💡 使用说明:")
-    print("   1. 在浏览器中打开上述任一地址")
-    print("   2. 上传图片或输入图片URL")
-    print("   3. 选择图床服务并获取链接（当前仅 MyCloud）")
-    print("")
-    print("⚠️  按 Ctrl+C 可停止服务器")
+    print(f"✅ 服务器启动成功！")
+    print(f"📍 访问地址: http://{local_ip}:{port}")
     print("="*60 + "\n")
     
     yield
@@ -49,8 +40,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="图片URL获取工具", lifespan=lifespan)
 
-# === 3. MinIO 配置（这里是后端内部访问地址，跟前端无关） ===
-MINIO_ENDPOINT = "http://s3.demo.test52dzhp.com"   # 这还是给 boto3 用的
+# === 3. MinIO 配置 ===
+MINIO_ENDPOINT = "http://s3.demo.test52dzhp.com"
 MINIO_ACCESS_KEY = "kuByCmeTH1TbzbnW"
 MINIO_SECRET_KEY = "TKhMmKHT0ZbbBlezfMfvaQyhTDEvQGv3"
 MINIO_BUCKET_NAME = "images"
@@ -64,12 +55,9 @@ def get_image_info(content: bytes):
         img = Image.open(BytesIO(content))
         return {"width": img.width, "height": img.height, "size": len(content)}
     except:
-        return {"width": 0, "height": len(content), "size": len(content)}
+        return {"width": 0, "height": 0, "size": len(content)}
 
 def create_minio_client():
-    """
-    封装一下，后面上传和读取都用它，方便以后要改配置
-    """
     return boto3.client(
         "s3",
         endpoint_url=MINIO_ENDPOINT,
@@ -78,7 +66,7 @@ def create_minio_client():
         config=Config(signature_version="s3v4")
     )
 
-# === 5. 唯一的上传函数：MyCloud (MinIO) ===
+# === 5. 上传逻辑 ===
 def upload_to_minio(data: bytes, name: str, fhash: str):
     print(f"   [MyCloud] 正在上传 {name[:40]}...")
     try:
@@ -86,27 +74,19 @@ def upload_to_minio(data: bytes, name: str, fhash: str):
         ext = os.path.splitext(name)[1] or ".jpg"
         key = f"{fhash}{ext}"
         
-        ctype = "application/octet-stream"
-        lower_ext = ext.lower()
-        if lower_ext in [".jpg", ".jpeg"]:
-            ctype = "image/jpeg"
-        elif lower_ext == ".png":
-            ctype = "image/png"
-        elif lower_ext == ".gif":
-            ctype = "image/gif"
-        elif lower_ext == ".webp":
-            ctype = "image/webp"
-        elif lower_ext == ".bmp":
-            ctype = "image/bmp"
+        # 尽可能准确地设置类型，防止浏览器误判
+        content_type, _ = mimetypes.guess_type(name)
+        if not content_type:
+            content_type = "application/octet-stream"
 
         s3.put_object(
             Bucket=MINIO_BUCKET_NAME,
             Key=key,
             Body=data,
-            ContentType=ctype
+            ContentType=content_type
         )
 
-        # 关键改动：不再返回 MinIO 域名，而是当前站点下的相对路径
+        # 返回相对路径
         url = f"/mycloud/{key}"
 
         print("   ✅ [MyCloud] 成功")
@@ -114,8 +94,7 @@ def upload_to_minio(data: bytes, name: str, fhash: str):
             "success": True,
             "service": "MyCloud",
             "url": url,
-            "key": key,
-            "content_type": ctype
+            "key": key
         }
     except Exception as e:
         print(f"   ❌ [MyCloud] 错误: {e}")
@@ -125,39 +104,31 @@ def upload_to_minio(data: bytes, name: str, fhash: str):
             "error": str(e)
         }
 
-SERVICE_MAP = {
-    "myminio": upload_to_minio
-}
-
 # === 6. 上传接口 ===
 @app.post("/upload")
 async def upload_endpoint(
     file: UploadFile = File(...),
     services: str = Form("myminio")
 ):
-    print(f"\n📥 收到上传任务: {file.filename}")
     try:
         content = await file.read()
         fhash = calculate_md5(content)
         info = get_image_info(content)
 
-        # 目前只支持 myminio，其它忽略
         res = upload_to_minio(content, file.filename, fhash)
 
         if not res["success"]:
-            print("❌ 上传失败")
             return JSONResponse({
                 "success": False,
-                "error": res.get("error", "上传失败"),
+                "error": res.get("error"),
                 "failed_list": [{"service": "MyCloud", "error": res.get("error")}]
             })
         
-        print("✨ 任务完成")
         return JSONResponse({
             "success": True,
             "filename": file.filename,
             "hash": fhash,
-            "url": res["url"],           # 形如 /mycloud/xxxx.jpg
+            "url": res["url"],
             "service": res["service"],
             "all_results": [res],
             "failed_list": [],
@@ -168,38 +139,45 @@ async def upload_endpoint(
 
     except Exception as e:
         traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
-# === 7. 图片代理接口：让前端只访问 /mycloud/...，不直接碰 MinIO 域名 ===
+# === 7. 图片代理接口 (修改重点) ===
 @app.get("/mycloud/{object_name:path}")
 def get_mycloud_image(object_name: str):
-    """
-    通过当前服务把 MinIO 里的图片读出来返回给浏览器：
-    - 浏览器看到的是当前站点的证书，不会再报 ERR_CERT_AUTHORITY_INVALID
-    - Content-Type 取自 MinIO 里保存的类型，浏览器会直接预览图片
-    """
     try:
         s3 = create_minio_client()
+        
+        # 1. 获取文件流
         obj = s3.get_object(Bucket=MINIO_BUCKET_NAME, Key=object_name)
         body = obj["Body"]
-        content_type = obj.get("ContentType", "application/octet-stream")
-        return StreamingResponse(body, media_type=content_type)
+        
+        # 2. 强制判断文件类型
+        # 优先根据文件名后缀判断类型 (例如 .jpg -> image/jpeg)
+        # 这样即使 MinIO 里存的是乱七八糟的类型，我们也能纠正过来
+        content_type, _ = mimetypes.guess_type(object_name)
+        
+        # 如果实在判断不出来，才用 MinIO 返回的，或者默认值
+        if not content_type:
+            content_type = obj.get("ContentType", "application/octet-stream")
+
+        # 3. 关键头信息：告诉浏览器 "Inline" (在页面内显示)
+        headers = {
+            "Content-Disposition": "inline",  # <--- 就是这句话禁止了自动下载
+            "Cache-Control": "public, max-age=315360000" # 让浏览器多缓存一会，加载更快
+        }
+
+        return StreamingResponse(body, media_type=content_type, headers=headers)
+
     except Exception as e:
-        print(f"   ❌ 读取 MyCloud 对象失败: {e}")
+        print(f"   ❌ 读取失败: {e}")
         raise HTTPException(status_code=404, detail="Image not found")
 
-# === 8. 简单验证接口（现在前端只是用来走流程） ===
+# === 8. 其他接口 ===
 @app.post("/validate")
 async def val(d: dict):
-    url = d.get("url")
-    print(f"验证 URL 请求: {url}")
-    # 目前简单返回成功，如果以后要严格检查可以再改
-    return {"success": True, "url": url}
+    return {"success": True, "url": d.get("url")}
 
-# === 9. 静态文件与首页 ===
+# 挂载前端
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 @app.get("/")
@@ -208,10 +186,4 @@ def idx():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8000,
-        log_level="warning",
-        access_log=False
-    )
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning", access_log=False)
