@@ -4,19 +4,24 @@ FROM python:3.10-slim
 # 设置工作目录
 WORKDIR /app
 
-# 安装必要的依赖 (不再安装 libgl1 等，避免网络错误)
+# ----------------- 🚀 关键优化点 🚀 -----------------
+# 1. 先只复制 requirements.txt 这一个文件过去
 COPY requirements.txt .
-# 使用清华源加速安装
-RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 复制所有项目代码
+# 2. 立刻安装依赖
+# 只要 requirements.txt 的内容没变，
+# 下次部署时，Docker 就会直接跳过这一步（使用缓存），速度几乎是 0 秒！
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# ----------------------------------------------------
+
+# 3. 依赖装完后，再复制剩下的所有代码
+# 这样即使你改了 main.py，Docker 也只会重新跑这一步，极快！
 COPY . .
 
-# 暴露端口 8000
+# 暴露端口
 EXPOSE 8000
 
-# 🔴 关键魔法代码：直接在镜像里告诉 Docker 怎么检查健康
-# 只要这一行生效，Coolify 面板怎么配都不重要了
+# 健康检查 (保留你之前的配置)
 HEALTHCHECK --interval=5s --timeout=3s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')" || exit 1
 
