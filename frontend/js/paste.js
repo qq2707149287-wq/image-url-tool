@@ -10,10 +10,15 @@ function getFullUrl(url) {
     return url;
 }
 
-// 命名规则
+// 命名规则 - 优先使用hash
 function getDefaultNameFromResultForPaste(res) {
+    // 优先使用hash作为文件名
     if (res && res.hash) return res.hash;
-    
+
+    // 如果有filename且不是默认的image.png,使用它
+    if (res && res.filename && res.filename !== 'image.png') return res.filename;
+
+    // 最后才从URL解析
     var fullUrl = getFullUrl(res.url);
     if (fullUrl) {
         try {
@@ -26,25 +31,25 @@ function getDefaultNameFromResultForPaste(res) {
                 if (dot > 0) last = last.substring(0, dot);
                 if (last) return last;
             }
-        } catch (e) {}
+        } catch (e) { }
     }
     return "img_" + Date.now();
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    var pasteArea       = document.getElementById('pasteArea');
-    var pastePreview    = document.getElementById('pastePreview');
-    var pasteLoading    = document.getElementById('pasteLoading');
-    var pasteResultBox  = document.getElementById('pasteResult');
-    var serviceBadge    = document.getElementById('pasteServiceBadge');
-    var resultLinkEl    = document.getElementById('pasteResultUrl');
-    var copyBtn         = document.getElementById('pasteCopyBtn');
+    var pasteArea = document.getElementById('pasteArea');
+    var pastePreview = document.getElementById('pastePreview');
+    var pasteLoading = document.getElementById('pasteLoading');
+    var pasteResultBox = document.getElementById('pasteResult');
+    var serviceBadge = document.getElementById('pasteServiceBadge');
+    var resultLinkEl = document.getElementById('pasteResultUrl');
+    var copyBtn = document.getElementById('pasteCopyBtn');
     // 二维码按钮已删除，不需要获取 qrBtn
-    var openBtn         = document.getElementById('pasteOpenBtn');
-    var infoBox         = document.getElementById('pasteImageInfo');
+    var openBtn = document.getElementById('pasteOpenBtn');
+    var infoBox = document.getElementById('pasteImageInfo');
 
-    var nameInput       = document.getElementById('pasteFilenameInput');
-    var renameBtn       = document.getElementById('pasteRenameSaveBtn');
+    var nameInput = document.getElementById('pasteFilenameInput');
+    var renameBtn = document.getElementById('pasteRenameSaveBtn');
 
     if (renameBtn && nameInput) {
         renameBtn.onclick = function () {
@@ -83,7 +88,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function copyText(text) {
-        var full = getFullUrl(text); 
+        var full = getFullUrl(text);
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(full);
         } else {
@@ -102,11 +107,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderUploadResult(data) {
         if (!data || !data.url) return;
-        
+
         var fullUrl = getFullUrl(data.url);
-        data.url = fullUrl; 
+        data.url = fullUrl;
         if (data.all_results) {
-            data.all_results.forEach(function(item) { item.url = getFullUrl(item.url); });
+            data.all_results.forEach(function (item) { item.url = getFullUrl(item.url); });
         }
 
         window.lastPasteUrl = fullUrl;
@@ -144,20 +149,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         showResultBox(true);
 
-        if (window.saveToHistory) {
-            window.saveToHistory({
-                url: fullUrl,
-                service: data.service || 'MyCloud',
-                filename: displayName,
-                hash: data.hash || null,
-                all_results: data.all_results || [{
-                    service: data.service || 'MyCloud',
-                    url: fullUrl
-                }],
-                width: data.width,
-                height: data.height,
-                size: data.size
-            });
+        // 刷新历史记录 (如果已加载)
+        if (typeof window.displayHistory === 'function') {
+            window.displayHistory();
         }
     }
 
@@ -209,8 +203,8 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
             var resp = await fetch('/validate', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({url: url})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url })
             });
             var data = await resp.json();
             showLoading(false);
@@ -243,7 +237,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     service: '网页图片',
                     filename: displayName,
                     hash: null,
-                    all_results: [{service: '网页图片', url: url}]
+                    all_results: [{ service: '网页图片', url: url }]
                 });
             }
 

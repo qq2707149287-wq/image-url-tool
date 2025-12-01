@@ -2,391 +2,473 @@
 
 window.historyPage = 1;
 window.historyPageSize = 10;
-window.historyFilteredData = [];
+window.historyTotal = 0;
+window.selectedIds = new Set(); // 使用 ID 进行多选，更准确
 
-// 保存历史
-window.saveToHistory = function(data) {
-    try {
-        var raw = localStorage.getItem("uploadHistory");
-        var list = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(list)) list = [];
+// ============ 数据清洗工具 (生成说明文件用) ============
+function cleanDataForExport(dataList) {
+    var result = [];
+    for (var i = 0; i < dataList.length; i++) {
+        var item = dataList[i];
+        var cleanItem = {};
 
-        var hash = data.hash || null;
-        var newLinks = [];
-        if (data.all_results && Array.isArray(data.all_results)) {
-            newLinks = data.all_results;
-        } else if (data.url) {
-            newLinks = [{ service: data.service, url: data.url }];
-        }
-        if (!newLinks.length) return;
-
-        var idx = -1;
-        if (hash) {
-            for (var i = 0; i < list.length; i++) {
-                if (list[i].hash === hash) {
-                    idx = i;
-                    break;
+        // 保留字段 - 确保URL是完整的
+        if (item.url) {
+            // 补全URL
+            var fullUrl = item.url;
+            if (!fullUrl.startsWith("http")) {
+                if (fullUrl.startsWith("/")) {
+                    fullUrl = window.location.origin + fullUrl;
                 }
             }
-        } else {
-            for (var j = 0; j < list.length; j++) {
-                if (list[j].url === data.url) {
-                    idx = j;
-                    break;
-                }
-            }
+            cleanItem.url = fullUrl;
+        }
+        if (item.filename) cleanItem.filename = item.filename;
+        if (item.width) cleanItem.width = item.width;
+        if (item.height) cleanItem.height = item.height;
+        if (item.size) cleanItem.size = item.size;
+
+        // 提取 content_type
+        if (item.content_type) {
+            cleanItem.content_type = item.content_type;
+        } else if (item.all_results && Array.isArray(item.all_results) && item.all_results.length > 0 && item.all_results[0].content_type) {
+            cleanItem.content_type = item.all_results[0].content_type;
         }
 
-        if (idx !== -1) {
-            var item = list[idx];
-            if (!item.all_results || !Array.isArray(item.all_results)) {
-                item.all_results = [{ service: item.service, url: item.url }];
-            }
-            for (var k = 0; k < newLinks.length; k++) {
-                var link = newLinks[k];
-                var exists = false;
-                for (var m = 0; m < item.all_results.length; m++) {
-                    if (item.all_results[m].url === link.url) {
-                        exists = true;
-                        break;
-                    }
-                }
-                if (!exists) {
-                    item.all_results.push(link);
-                }
-            }
-            item.time = new Date().toLocaleString();
-            item.url = data.url;
-            item.filename = data.filename || item.filename || "未命名";
-            list.splice(idx, 1);
-            list.unshift(item);
-        } else {
-            var newItem = {
-                url: newLinks[0].url,
-                service: newLinks[0].service,
-                filename: data.filename || "未命名",
-                time: new Date().toLocaleString(),
-                hash: hash,
-                all_results: newLinks,
-                linkStatus: data.linkStatus || "unknown"
-            };
-            list.unshift(newItem);
-        }
+        // 移除 service, time, hash, linkstatus (不添加即可)
 
-        if (list.length > 500) list = list.slice(0, 500);
-        localStorage.setItem("uploadHistory", JSON.stringify(list));
-
-        if (typeof window.displayHistory === "function") {
-            window.displayHistory();
-        }
-    } catch (e) {
-        console.error("History save error:", e);
+        result.push(cleanItem);
     }
-};
+    return result;
+}
 
-// 新增：按 URL 重命名（上传页、粘贴页、公用）
-window.renameHistoryByUrl = function(url, newName) {
-    if (!url || !newName) return;
-    try {
-        var raw = localStorage.getItem("uploadHistory");
-        var list = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(list)) list = [];
-
-        var changed = false;
-        for (var i = 0; i < list.length; i++) {
-            if (list[i].url === url) {
-                list[i].filename = newName;
-                changed = true;
-                break;
-            }
-        }
-        if (!changed) return;
-
-        localStorage.setItem("uploadHistory", JSON.stringify(list));
-        if (typeof window.displayHistory === "function") {
-            window.displayHistory();
-        }
-    } catch (e) {
-        console.error("renameHistoryByUrl error:", e);
-    }
-};
-
+// ============ DOM 初始化 ============
 document.addEventListener("DOMContentLoaded", function () {
     var historyList = document.getElementById("historyList");
+    // 如果页面没有历史记录相关元素，直接返回
     if (!historyList) return;
 
-    var clearBtn      = document.getElementById("clearHistoryBtn");
-    var searchInput   = document.getElementById("historySearch");
-    var exportBtn     = document.getElementById("exportJsonBtn");
-    var importBtn     = document.getElementById("importJsonBtn");
-    var importInput   = document.getElementById("importFileInput");
-    var tabHistory    = document.getElementById("tab-history");
+    var clearBtn = document.getElementById("clearHistoryBtn");
+    var searchInput = document.getElementById("historySearch");
+    var tabHistory = document.getElementById("tab-history");
     var paginationBar = document.getElementById("historyPagination");
-    var pageInfoText  = document.getElementById("historyPageInfo");
+    var pageInfoText = document.getElementById("historyPageInfo");
+    var pageSizeSelect = document.getElementById("historyPageSizeSelect");
 
-    function renderHistory() {
-        var keyword = searchInput ? searchInput.value.trim().toLowerCase() : "";
-        var raw = localStorage.getItem("uploadHistory");
-        var list = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(list)) list = [];
+    var selectAllBox = document.getElementById("selectAllCheckbox");
+    var multiActions = document.getElementById("multiActions");
+    var selectedCountSpan = document.getElementById("selectedCount");
+    var batchDelBtn = document.getElementById("batchDeleteBtn");
+    var batchGenBtn = document.getElementById("batchGenerateDescBtn");
 
+    var descModal = document.getElementById("descModal");
+    var descTextarea = document.getElementById("descTextarea");
+    var copyDescBtn = document.getElementById("copyDescBtn");
+    var downloadDescBtn = document.getElementById("downloadDescBtn");
+
+    // ============ 工具函数 ============
+    // 重命名历史记录（通过URL）
+    window.renameHistoryByUrl = function (url, newName) {
+        // 发送请求到后端更新数据库中的filename
+        fetch("/history/rename", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: url, filename: newName })
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    // 刷新当前页面的历史记录
+                    loadHistory();
+                } else {
+                    if (window.showToast) window.showToast("重命名失败: " + (data.error || "未知错误"), "error");
+                }
+            })
+            .catch(function (err) {
+                console.error(err);
+                if (window.showToast) window.showToast("网络错误", "error");
+            });
+    };
+
+    // ============ 加载历史记录 (API) ============
+    function loadHistory() {
+        var keyword = searchInput ? searchInput.value.trim() : "";
+        var url = "/history?page=" + window.historyPage + "&page_size=" + window.historyPageSize;
+        if (keyword) {
+            url += "&keyword=" + encodeURIComponent(keyword);
+        }
+
+        fetch(url)
+            .then(function (res) { return res.json(); })
+            .then(function (res) {
+                if (res.success) {
+                    window.historyTotal = res.total;
+                    renderHistoryList(res.data);
+                    updatePagination();
+                } else {
+                    if (window.showToast) window.showToast("加载历史记录失败: " + res.error, "error");
+                }
+            })
+            .catch(function (err) {
+                console.error(err);
+                if (window.showToast) window.showToast("网络错误", "error");
+            });
+    }
+
+    // ============ 渲染列表 ============
+    function renderHistoryList(list) {
         historyList.innerHTML = "";
+        window.currentHistoryData = list; // 保存当前页数据供全选使用
 
-        var filteredList = list.filter(function(item) {
-            if (!keyword) return true;
-            return (item.filename || "").toLowerCase().indexOf(keyword) !== -1 ||
-                   (item.url || "").toLowerCase().indexOf(keyword) !== -1;
-        });
-        
-        window.historyFilteredData = filteredList;
-
-        if (filteredList.length === 0) {
-            historyList.innerHTML = '<div class="empty-state" style="text-align:center;padding:20px;color:#999">暂无历史记录</div>';
+        if (!list || list.length === 0) {
+            historyList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-secondary)">暂无历史记录</div>';
             if (paginationBar) paginationBar.style.display = 'none';
+            // 重置多选状态
+            if (selectAllBox) {
+                selectAllBox.checked = false;
+                selectAllBox.disabled = true;
+            }
             return;
         }
 
         if (paginationBar) paginationBar.style.display = 'flex';
-        
-        var totalPages = Math.ceil(filteredList.length / window.historyPageSize);
+        if (selectAllBox) selectAllBox.disabled = false;
+
+        // 检查全选状态
+        updateSelectAllState(list);
+
+        for (var i = 0; i < list.length; i++) {
+            historyList.appendChild(createHistoryCard(list[i]));
+        }
+
+        updateMultiActionState();
+    }
+
+    function updatePagination() {
+        if (!pageInfoText) return;
+        var totalPages = Math.ceil(window.historyTotal / window.historyPageSize);
         if (totalPages < 1) totalPages = 1;
-        if (window.historyPage > totalPages) window.historyPage = totalPages;
-        if (window.historyPage < 1) window.historyPage = 1;
+        pageInfoText.innerText = window.historyPage + " / " + totalPages;
+    }
 
-        if (pageInfoText) pageInfoText.innerText = window.historyPage + " / " + totalPages;
+    // ============ 创建卡片 ============
+    function createHistoryCard(item) {
+        var card = document.createElement("div");
+        card.className = "history-card";
+        if (window.selectedIds.has(item.id)) {
+            card.classList.add("selected");
+        }
 
-        var start = (window.historyPage - 1) * window.historyPageSize;
-        var end = start + window.historyPageSize;
-        var pageItems = filteredList.slice(start, end);
+        // 复选框区域
+        var checkOverlay = document.createElement("div");
+        checkOverlay.className = "checkbox-overlay";
+        checkOverlay.onclick = function (e) { e.stopPropagation(); toggleSelection(item.id); };
 
-        pageItems.forEach(function(item) {
-            var all = item.all_results || [{service: item.service, url: item.url}];
-            var displayUrl = item.url || (all[0] ? all[0].url : "");
+        var checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "history-checkbox";
+        checkbox.checked = window.selectedIds.has(item.id);
+        checkbox.onclick = function (e) { e.stopPropagation(); toggleSelection(item.id); };
 
-            var card = document.createElement("div");
-            card.className = "history-card";
-            card.setAttribute("data-url", displayUrl); 
+        checkOverlay.appendChild(checkbox);
+        card.appendChild(checkOverlay);
 
-            var mainRow = document.createElement("div");
-            mainRow.className = "history-main-row";
-            
-            var img = document.createElement("img");
-            img.className = "history-thumb";
-            img.src = displayUrl;
-            img.onerror = function() { this.classList.add("broken"); };
+        // 主内容
+        var mainRow = document.createElement("div");
+        mainRow.className = "history-main-row";
 
-            var infoDiv = document.createElement("div");
-            infoDiv.className = "history-info";
-            
-            var nameRow = document.createElement("div");
-            nameRow.className = "history-name-row";
-            
-            var nameSpan = document.createElement("span");
-            nameSpan.className = "history-name";
-            nameSpan.textContent = item.filename || "未命名";
-            nameSpan.title = item.filename || "未命名";
-            nameRow.appendChild(nameSpan);
+        // 补全URL
+        var fullUrl = item.url;
+        if (!fullUrl.startsWith("http")) {
+            if (fullUrl.startsWith("/")) {
+                fullUrl = window.location.origin + fullUrl;
+            }
+        }
 
-            if (all.length > 1) {
-                var badge = document.createElement("span");
-                badge.className = "source-badge";
-                badge.textContent = all.length + "个源";
-                nameRow.appendChild(badge);
+        // 缩略图
+        var img = document.createElement("img");
+        img.className = "history-thumb";
+        img.src = fullUrl;
+        img.onerror = function () {
+            // 如果加载失败，尝试显示默认图或隐藏
+            this.style.opacity = "0.5";
+        };
+
+        var infoDiv = document.createElement("div");
+        infoDiv.className = "history-info";
+
+        var nameSpan = document.createElement("span");
+        nameSpan.className = "history-name";
+        nameSpan.textContent = item.filename || "未命名";
+        nameSpan.title = item.filename; // tooltip
+        infoDiv.appendChild(nameSpan);
+
+        var meta = document.createElement("div");
+        meta.className = "history-time";
+        // 格式化时间
+        var timeStr = item.created_at || "";
+        try {
+            // 简单处理时间显示
+            timeStr = timeStr.replace("T", " ").split(".")[0];
+        } catch (e) { }
+        meta.textContent = timeStr + " · " + (item.service || "MyCloud");
+        infoDiv.appendChild(meta);
+
+        // 按钮组
+        var actions = document.createElement("div");
+        actions.className = "history-actions";
+
+        var btnCopy = document.createElement("button");
+        btnCopy.className = "btn-mini";
+        btnCopy.textContent = "复制";
+        btnCopy.onclick = function (e) {
+            e.stopPropagation();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(fullUrl);
             } else {
-                var badgeS = document.createElement("span");
-                badgeS.className = "source-badge";
-                badgeS.textContent = item.service || "MyCloud";
-                nameRow.appendChild(badgeS);
+                var ta = document.createElement("textarea");
+                ta.value = fullUrl;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
             }
+            if (window.showToast) window.showToast("已复制", "success");
+        };
 
-            var meta = document.createElement("div");
-            meta.className = "history-time";
-            meta.textContent = item.time || "";
+        var btnOpen = document.createElement("button");
+        btnOpen.className = "btn-mini";
+        btnOpen.textContent = "打开";
+        btnOpen.onclick = function (e) { e.stopPropagation(); window.open(fullUrl, "_blank"); };
 
-            infoDiv.appendChild(nameRow);
-            infoDiv.appendChild(meta);
-
-            var actions = document.createElement("div");
-            actions.className = "history-actions";
-
-            var btnCopy = document.createElement("button");
-            btnCopy.className = "btn-mini";
-            btnCopy.textContent = "复制";
-            btnCopy.onclick = function() {
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(displayUrl);
-                } else {
-                    var ta = document.createElement("textarea");
-                    ta.value = displayUrl;
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand("copy");
-                    document.body.removeChild(ta);
+        var btnRename = document.createElement("button");
+        btnRename.className = "btn-mini";
+        btnRename.textContent = "重命名";
+        btnRename.onclick = function (e) {
+            e.stopPropagation();
+            var newName = prompt("请输入新名称:", item.filename);
+            if (newName && newName.trim() !== "" && newName !== item.filename) {
+                if (window.renameHistoryByUrl) {
+                    window.renameHistoryByUrl(fullUrl, newName.trim());
                 }
-                if (window.showToast) window.showToast("已复制");
-                else alert("已复制");
-            };
+            }
+        };
 
-            var btnOpen = document.createElement("button");
-            btnOpen.className = "btn-mini";
-            btnOpen.textContent = "打开";
-            btnOpen.onclick = function() {
-                window.open(displayUrl, "_blank");
-            };
+        actions.appendChild(btnRename);
+        actions.appendChild(btnCopy);
+        actions.appendChild(btnOpen);
 
-            // 新增：重命名按钮
-            var btnRename = document.createElement("button");
-            btnRename.className = "btn-mini";
-            btnRename.textContent = "重命名";
-            btnRename.onclick = function () {
-                var current = item.filename || "";
-                var newName = window.prompt("输入新的图片名称", current);
-                if (!newName) return;
-                window.renameHistoryByUrl(displayUrl, newName);
-            };
+        mainRow.appendChild(img);
+        mainRow.appendChild(infoDiv);
+        mainRow.appendChild(actions);
+        card.appendChild(mainRow);
 
-            actions.appendChild(btnCopy);
-            actions.appendChild(btnOpen);
-            actions.appendChild(btnRename);
+        return card;
+    }
 
-            if (all.length > 1) {
-                var btnToggle = document.createElement("button");
-                btnToggle.className = "btn-mini toggle-btn";
-                btnToggle.textContent = "▼";
-                btnToggle.onclick = function() {
-                    var sub = card.querySelector(".history-sublist");
-                    if (sub.style.display === "none") {
-                        sub.style.display = "block";
-                        this.style.transform = "rotate(180deg)";
+    // ============ 多选逻辑 ============
+    function toggleSelection(id) {
+        if (window.selectedIds.has(id)) window.selectedIds.delete(id);
+        else window.selectedIds.add(id);
+
+        // 重新渲染当前列表以更新样式
+        renderHistoryList(window.currentHistoryData || []);
+    }
+
+    function updateSelectAllState(list) {
+        if (!selectAllBox) return;
+        var allSelected = true;
+        for (var i = 0; i < list.length; i++) {
+            if (!window.selectedIds.has(list[i].id)) {
+                allSelected = false;
+                break;
+            }
+        }
+        selectAllBox.checked = allSelected;
+    }
+
+    function updateMultiActionState() {
+        var count = window.selectedIds.size;
+        if (selectedCountSpan) selectedCountSpan.innerText = String(count);
+        if (multiActions) multiActions.style.display = count > 0 ? "flex" : "none";
+    }
+
+    // 全选/反选 (仅针对当前页)
+    if (selectAllBox) {
+        selectAllBox.onclick = function () {
+            var targetState = this.checked;
+            var list = window.currentHistoryData || [];
+            for (var i = 0; i < list.length; i++) {
+                if (targetState) window.selectedIds.add(list[i].id);
+                else window.selectedIds.delete(list[i].id);
+            }
+            renderHistoryList(list);
+        };
+    }
+
+    // ============ 批量删除 (API) ============
+    if (batchDelBtn) {
+        batchDelBtn.onclick = function () {
+            var count = window.selectedIds.size;
+            if (count === 0) return;
+            if (!confirm("确定删除选中的 " + count + " 项记录吗？(数据库删除不可恢复)")) return;
+
+            var ids = Array.from(window.selectedIds);
+
+            fetch("/history/delete", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ids: ids })
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (res) {
+                    if (res.success) {
+                        if (window.showToast) window.showToast("已删除 " + res.count + " 项", "success");
+                        window.selectedIds.clear();
+                        loadHistory(); // 刷新列表
                     } else {
-                        sub.style.display = "none";
-                        this.style.transform = "rotate(0deg)";
+                        alert("删除失败: " + res.error);
                     }
-                };
-                actions.appendChild(btnToggle);
-            }
-
-            mainRow.appendChild(img);
-            mainRow.appendChild(infoDiv);
-            mainRow.appendChild(actions);
-            card.appendChild(mainRow);
-
-            if (all.length > 1) {
-                var subList = document.createElement("div");
-                subList.className = "history-sublist";
-                subList.style.display = "none";
-
-                all.forEach(function(sub) {
-                    var row = document.createElement("div");
-                    row.className = "sub-row";
-                    
-                    var tag = document.createElement("span");
-                    tag.className = "sub-tag";
-                    tag.textContent = sub.service;
-
-                    var link = document.createElement("a");
-                    link.className = "sub-link";
-                    link.href = sub.url;
-                    link.target = "_blank";
-                    link.textContent = sub.url;
-
-                    var copySub = document.createElement("button");
-                    copySub.className = "btn-text-sm";
-                    copySub.textContent = "复制";
-                    copySub.style.marginLeft = "auto";
-                    copySub.onclick = function() {
-                        navigator.clipboard.writeText(sub.url);
-                        if (window.showToast) window.showToast("已复制 " + sub.service);
-                    };
-
-                    row.appendChild(tag);
-                    row.appendChild(link);
-                    row.appendChild(copySub);
-                    subList.appendChild(row);
+                })
+                .catch(function (e) {
+                    console.error(e);
+                    alert("网络错误");
                 });
-                card.appendChild(subList);
-            }
-
-            historyList.appendChild(card);
-        });
-    }
-
-    window.displayHistory = renderHistory;
-
-    window.prevHistoryPage = function() {
-        if (window.historyPage > 1) {
-            window.historyPage--;
-            renderHistory();
-        }
-    };
-    window.nextHistoryPage = function() {
-        var max = Math.ceil(window.historyFilteredData.length / window.historyPageSize);
-        if (window.historyPage < max) {
-            window.historyPage++;
-            renderHistory();
-        }
-    };
-    window.changeHistoryPageSize = function(val) {
-        window.historyPageSize = parseInt(val, 10);
-        window.historyPage = 1;
-        renderHistory();
-    };
-
-    if (searchInput) {
-        searchInput.oninput = function() {
-            window.historyPage = 1;
-            renderHistory();
-        };
-    }
-    if (tabHistory) {
-        tabHistory.onclick = renderHistory;
-    }
-    if (clearBtn) {
-        clearBtn.onclick = function() {
-            if (window.confirm("确定清空所有历史记录？")) {
-                localStorage.removeItem("uploadHistory");
-                renderHistory();
-            }
         };
     }
 
-    if (exportBtn) {
-        exportBtn.onclick = function() {
-            var raw = localStorage.getItem("uploadHistory");
-            var list = raw ? JSON.parse(raw) : [];
-            if (!list.length) {
-                alert("无记录");
+    // ============ 批量生成说明文件 ============
+    if (batchGenBtn) {
+        batchGenBtn.onclick = function () {
+            var count = window.selectedIds.size;
+            if (count === 0) return;
+
+            // 我们需要获取选中项的完整数据。
+            // 由于分页，选中的ID可能不在当前页。
+            // 简单起见，我们只支持对当前页已加载的数据生成，或者需要后端支持根据ID获取详情。
+            // 这里我们遍历 currentHistoryData，如果 ID 在 selectedIds 里则选中。
+            // *注意*: 如果用户跨页选了，这里的逻辑只能处理当前页的数据。
+            // 为了支持跨页，我们需要在前端缓存所有选中的 item 数据，或者请求后端。
+            // 鉴于复杂度，目前仅支持处理当前页选中的数据，或者我们尝试在 selectedIds 里存对象？
+            // 为了稳健，我们暂时只处理当前页的选中项。如果用户翻页了，数据可能丢失。
+            // 改进：selectedIds 只存 ID，但为了生成文件，我们需要数据。
+            // 方案：遍历 currentHistoryData。如果用户需要跨页导出，建议增加“获取选中项详情”的接口。
+            // 简化方案：仅导出当前页选中的项。
+
+            var targets = [];
+            var list = window.currentHistoryData || [];
+            for (var i = 0; i < list.length; i++) {
+                if (window.selectedIds.has(list[i].id)) {
+                    targets.push(list[i]);
+                }
+            }
+
+            if (targets.length === 0 && window.selectedIds.size > 0) {
+                alert("只能生成当前页显示的记录说明文件。请在当前页选择。");
                 return;
             }
-            var jsonStr = JSON.stringify(list, null, 2);
-            var dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(jsonStr);
+
+            var cleaned = cleanDataForExport(targets);
+            var jsonStr = JSON.stringify(cleaned, null, 2);
+            if (descTextarea) descTextarea.value = jsonStr;
+            if (descModal) descModal.style.display = "flex";
+        };
+    }
+
+    // ============ 模态框操作 ============
+    if (copyDescBtn) {
+        copyDescBtn.onclick = function () {
+            if (!descTextarea) return;
+            descTextarea.select();
+            document.execCommand("copy");
+            if (window.showToast) window.showToast("文本已复制", "success");
+        };
+    }
+
+    if (downloadDescBtn) {
+        downloadDescBtn.onclick = function () {
+            if (!descTextarea) return;
+            var content = descTextarea.value;
+            var blob = new Blob([content], { type: "application/json;charset=utf-8" });
+            var url = URL.createObjectURL(blob);
             var a = document.createElement("a");
-            a.href = dataUri;
-            a.download = "history_backup.json";
+            a.href = url;
+            a.download = "image_descriptions_" + Date.now() + ".json";
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-        };
-    }
-    
-    if (importBtn && importInput) {
-        importBtn.onclick = function() { importInput.click(); };
-        importInput.onchange = function() {
-            var f = importInput.files[0];
-            if (!f) return;
-            var r = new FileReader();
-            r.onload = function(e) {
-                try {
-                    var d = JSON.parse(e.target.result);
-                    if (!Array.isArray(d)) throw new Error();
-                    localStorage.setItem("uploadHistory", JSON.stringify(d));
-                    renderHistory();
-                    alert("导入成功");
-                } catch(x) { alert("格式错误"); }
-            };
-            r.readAsText(f);
+            URL.revokeObjectURL(url);
+            if (window.showToast) window.showToast("文件已生成", "success");
         };
     }
 
-    renderHistory();
+    // ============ 清空全部 (API) ============
+    if (clearBtn) {
+        clearBtn.onclick = function () {
+            if (window.confirm("确定清空所有历史记录？此操作不可恢复！")) {
+                fetch("/history/clear", { method: "POST" })
+                    .then(function (res) { return res.json(); })
+                    .then(function (res) {
+                        if (res.success) {
+                            window.selectedIds.clear();
+                            loadHistory();
+                            if (window.showToast) window.showToast("历史记录已清空", "success");
+                        } else {
+                            alert("清空失败: " + res.error);
+                        }
+                    });
+            }
+        };
+    }
+
+    // ============ 搜索 ============
+    var searchTimer;
+    if (searchInput) {
+        searchInput.oninput = function () {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(function () {
+                window.historyPage = 1;
+                loadHistory();
+            }, 300);
+        };
+    }
+
+    // ============ 分页控制 ============
+    window.prevHistoryPage = function () {
+        if (window.historyPage > 1) {
+            window.historyPage--;
+            loadHistory();
+        }
+    };
+    window.nextHistoryPage = function () {
+        var max = Math.ceil(window.historyTotal / window.historyPageSize);
+        if (window.historyPage < max) {
+            window.historyPage++;
+            loadHistory();
+        }
+    };
+    window.changeHistoryPageSize = function (val) {
+        window.historyPageSize = parseInt(val, 10);
+        window.historyPage = 1;
+        loadHistory();
+    };
+
+    // ============ 暴露给全局的刷新函数 ============
+    window.displayHistory = function () {
+        loadHistory();
+    };
+
+    // ============ 初始化 ============
+    // 如果当前是在历史记录 tab，立即加载
+    if (tabHistory && tabHistory.classList.contains("active")) {
+        loadHistory();
+    }
+
+    // 监听 Tab 切换
+    if (tabHistory) {
+        tabHistory.addEventListener("click", function () {
+            loadHistory();
+        });
+    }
 });
+

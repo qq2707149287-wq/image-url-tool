@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>私有云图床工具</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
     <div class="container">
         <div class="header">
@@ -15,13 +17,13 @@
                 <button class="btn-ghost" id="themeToggle">🌙 深色模式</button>
             </div>
         </div>
-        
+
         <div class="tabs">
             <button class="tab active" id="tab-upload">批量上传</button>
             <button class="tab" id="tab-paste">粘贴上传</button>
             <button class="tab" id="tab-history">历史记录</button>
         </div>
-        
+
         <!-- 1. 批量上传页 -->
         <div id="content-upload" class="tab-content active">
             <div id="uploadArea" class="upload-area">
@@ -29,101 +31,37 @@
                 <p class="hint">所有图片统一上传到 MyCloud</p>
             </div>
 
-            <!-- 图床选择：隐藏，只保留 myminio 供 JS 读取 -->
-            <div class="service-selector" id="uploadServiceSelector" style="display:none;">
-                <p class="selector-title">上传目标（仅 MyCloud 有效）</p>
-                <div class="checkbox-group">
-                    <label><input type="checkbox" value="myminio" checked> MyCloud</label>
+            <input type="file" id="fileInput" accept="image/*" multiple hidden>
+
+            <!-- 上传列表的多选工具栏 -->
+            <div class="multi-select-toolbar" id="uploadMultiToolbar" style="display:none; margin-bottom:10px;">
+                <label style="font-size:14px; display:flex; align-items:center; cursor:pointer;">
+                    <input type="checkbox" id="uploadSelectAll"
+                        style="width:16px; height:16px; margin-right:8px; accent-color:var(--primary-color);">
+                    全选
+                </label>
+                <div class="multi-actions" style="display:flex; gap:10px; align-items:center;">
+                    <span style="font-size:13px; color:var(--text-secondary);">已选 <b
+                            id="uploadSelectedCount">0</b></span>
+                    <button class="btn-mini" id="uploadBatchGenBtn">生成说明文件</button>
+                    <button class="btn-mini" id="uploadBatchDelBtn"
+                        style="color:var(--danger); border-color:var(--danger);">移除</button>
                 </div>
             </div>
 
-            <!-- 压缩选项 -->
-            <div class="compress-options">
-                <span>压缩等级: </span>
-                <label style="margin-right: 8px;">
-                    <input type="radio" name="compressMode" value="none" checked> 原图
-                </label>
-                <label style="margin-right: 8px;">
-                    <input type="radio" name="compressMode" value="medium"> 中等
-                </label>
-                <label>
-                    <input type="radio" name="compressMode" value="high"> 强力
-                </label>
-
-                <label style="margin-left: 20px;">转换格式: 
-                    <select id="outputFormatSelect">
-                        <option value="auto">保持原样</option>
-                        <option value="jpeg">转 JPEG</option>
-                        <option value="png">转 PNG</option>
-                        <option value="webp">转 WebP</option>
-                    </select>
-                </label>
-            </div>
-
-            <input type="file" id="fileInput" accept="image/*" multiple hidden>
-            
             <!-- 批量列表区域 -->
             <div id="uploadBatchList" class="batch-list"></div>
-
-            <!-- 调整顺序：最新上传结果放在翻页栏上方 -->
-            <div id="uploadResult" class="result-box" style="display:none; margin-top: 20px; margin-bottom: 20px;">
-                <h3>最新上传结果</h3>
-                <span id="uploadServiceBadge" class="service-badge"></span>
-                <div class="url-box">
-                    <a id="uploadResultUrl" target="_blank" href="#"></a>
-                </div>
-                <div class="action-buttons" style="margin-top: 10px; display:flex; gap:10px;">
-                    <button class="copy-btn" id="uploadCopyBtn">复制链接</button>
-                    <button class="copy-btn" id="uploadOpenBtn">打开图片</button>
-                </div>
-
-                <!-- 新增：上传页重命名 -->
-                <div class="rename-box" style="margin-top:10px; display:flex; gap:8px; align-items:center;">
-                    <span>图片名称:</span>
-                    <input type="text" id="uploadFilenameInput" class="input-text" style="flex:1; min-width:0;">
-                    <button class="btn-mini" id="uploadRenameSaveBtn">保存名称</button>
-                </div>
-
-                <div id="uploadImageInfo" class="info-grid" style="margin-top: 15px;"></div>
-            </div>
-
-            <!-- 翻页栏 -->
-            <div id="uploadPagination" class="pagination-bar" style="display:none; margin-top:15px; padding:10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; justify-content:space-between; align-items:center;">
-                <div>
-                    <span style="font-size:13px; color:var(--text-secondary);">每页显示:</span>
-                    <select id="uploadPageSizeSelect" onchange="window.changeUploadPageSize(this.value)" style="padding:4px;">
-                        <option value="5">5</option>
-                        <option value="10" selected>10</option>
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                    </select>
-                </div>
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <button class="btn-mini" onclick="window.prevUploadPage()">上一页</button>
-                    <span id="uploadPageInfo" style="font-size:13px; font-weight:bold;">1/1</span>
-                    <button class="btn-mini" onclick="window.nextUploadPage()">下一页</button>
-                </div>
-            </div>
         </div>
-        
+
         <!-- 2. 粘贴上传页 -->
         <div id="content-paste" class="tab-content">
             <div id="pasteArea" class="paste-area" tabindex="0">
                 <p>Ctrl + V 在此处粘贴图片</p>
             </div>
-
-            <div class="service-selector" id="pasteServiceSelector" style="display:none;">
-                <p class="selector-title">上传目标（仅 MyCloud 有效）</p>
-                <div class="checkbox-group">
-                    <label><input type="checkbox" value="myminio" checked> MyCloud</label>
-                </div>
-            </div>
-
             <img id="pastePreview" class="preview-img">
-            
             <div id="pasteLoading" class="loading" style="display:none;">
                 <div class="spinner"></div>
-                <p>正在处理并上传...</p>
+                <p>处理中...</p>
             </div>
 
             <div id="pasteResult" class="result-box">
@@ -134,47 +72,65 @@
                     <button class="copy-btn" id="pasteCopyBtn">复制</button>
                     <button class="copy-btn" id="pasteOpenBtn">打开</button>
                 </div>
-
-                <!-- 新增：粘贴页重命名 -->
                 <div class="rename-box" style="margin-top:10px; display:flex; gap:8px; align-items:center;">
                     <span>图片名称:</span>
-                    <input type="text" id="pasteFilenameInput" class="input-text" style="flex:1; min-width:0;">
+                    <input type="text" id="pasteFilenameInput" class="input-text" style="flex:1;">
                     <button class="btn-mini" id="pasteRenameSaveBtn">保存名称</button>
                 </div>
-
-                <div id="pasteImageInfo" class="info-grid"></div>
             </div>
         </div>
-        
+
         <!-- 3. 历史记录页 -->
         <div id="content-history" class="tab-content">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
                 <h3>历史记录</h3>
                 <div class="history-tools">
-                     <button class="btn-ghost" id="exportJsonBtn">导出备份</button>
-                     <input type="file" id="importFileInput" hidden>
-                     <button class="btn-ghost" id="importJsonBtn">导入备份</button>
-                     <button class="btn-ghost" id="clearHistoryBtn" style="color:var(--danger)">清空全部</button>
+                    <button class="btn-ghost" id="clearHistoryBtn" style="color:var(--danger)">清空全部</button>
                 </div>
             </div>
-            
-            <div class="history-filters">
-                <input type="text" id="historySearch" placeholder="搜索文件名或链接...">
+
+            <!-- 搜索栏 -->
+            <div style="margin-bottom: 1rem;">
+                <div style="position: relative; max-width: 400px;">
+                    <input type="text" id="historySearch" placeholder="🔍 搜索文件名或URL..." class="input-text"
+                        style="width: 100%; padding: 10px 40px 10px 15px; font-size: 14px; border-radius: 8px; border: 1px solid var(--border-color); transition: all 0.2s;">
+                    <button id="historySearchBtn"
+                        style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: var(--primary-color); color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 13px; transition: all 0.2s;">
+                        搜索
+                    </button>
+                </div>
             </div>
-            
+
+            <!-- 历史多选工具栏 -->
+            <div class="multi-select-toolbar">
+                <label style="font-size:14px; display:flex; align-items:center; cursor:pointer;">
+                    <input type="checkbox" id="selectAllCheckbox"
+                        style="width:16px; height:16px; margin-right:8px; accent-color:var(--primary-color);">
+                    全选 / 反选
+                </label>
+                <div class="multi-actions" id="multiActions" style="display:none;">
+                    <span style="font-size:13px; color:var(--text-secondary); margin-right:10px;">已选 <b
+                            id="selectedCount">0</b> 项</span>
+                    <button class="btn-mini" id="batchGenerateDescBtn">生成说明文件</button>
+                    <button class="btn-mini" id="batchDeleteBtn"
+                        style="color:var(--danger); border-color:var(--danger);">删除</button>
+                </div>
+            </div>
+
             <div id="historyList"></div>
 
-            <div id="historyPagination" class="pagination-bar" style="display:none; margin-top:15px; padding:10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; justify-content:space-between; align-items:center;">
+            <div id="historyPagination" class="pagination-bar"
+                style="display:none; margin-top:15px; padding:10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:8px; justify-content:space-between; align-items:center;">
                 <div>
                     <span style="font-size:13px; color:var(--text-secondary);">每页显示:</span>
-                    <select id="historyPageSizeSelect" onchange="window.changeHistoryPageSize(this.value)" style="padding:4px;">
+                    <select id="historyPageSizeSelect" onchange="window.changeHistoryPageSize(this.value)">
                         <option value="5">5</option>
                         <option value="10" selected>10</option>
                         <option value="20">20</option>
                         <option value="50">50</option>
                     </select>
                 </div>
-                <div style="display:flex; gap:10px; align-items:center;">
+                <div style="display:flex; gap:10px;">
                     <button class="btn-mini" onclick="window.prevHistoryPage()">上一页</button>
                     <span id="historyPageInfo" style="font-size:13px; font-weight:bold;">1/1</span>
                     <button class="btn-mini" onclick="window.nextHistoryPage()">下一页</button>
@@ -183,14 +139,31 @@
         </div>
     </div>
 
+    <!-- 结果文本生成模态框 -->
+    <div id="descModal" class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">生成的说明文件</span>
+                <button class="modal-close"
+                    onclick="document.getElementById('descModal').style.display='none'">×</button>
+            </div>
+            <div class="modal-body">
+                <textarea id="descTextarea" readonly></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-mini" id="copyDescBtn">复制文本</button>
+                <button class="btn-mini" id="downloadDescBtn">生成文件</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container" class="toast-container"></div>
-    
+
     <script src="/static/js/ui.js" defer></script>
     <script src="/static/js/core.js" defer></script>
     <script src="/static/js/upload.js" defer></script>
     <script src="/static/js/paste.js" defer></script>
     <script src="/static/js/history.js" defer></script>
-    <script src="/static/js/link_check.js" defer></script>
-    <!-- qr.js 已被移除 -->
 </body>
+
 </html>
