@@ -195,6 +195,15 @@ document.addEventListener('DOMContentLoaded', function () {
         nameSpan.className = 'history-name';
         nameSpan.innerText = name;
 
+        // 显示哈希值（如果有）
+        var hashSpan = document.createElement('span');
+        hashSpan.style.fontSize = '11px';
+        hashSpan.style.color = 'var(--text-secondary)';
+        hashSpan.style.fontFamily = 'monospace';
+        if (data.hash) {
+            hashSpan.innerText = 'Hash: ' + data.hash;
+        }
+
         // 显示大小
         var sizeSpan = document.createElement('span');
         sizeSpan.style.fontSize = '12px';
@@ -205,6 +214,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         infoDiv.appendChild(nameSpan);
+        if (data.hash) infoDiv.appendChild(hashSpan);
         infoDiv.appendChild(sizeSpan);
 
         var actions = document.createElement('div');

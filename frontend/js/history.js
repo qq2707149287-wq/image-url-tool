@@ -210,6 +210,16 @@ document.addEventListener("DOMContentLoaded", function () {
         nameSpan.title = item.filename; // tooltip
         infoDiv.appendChild(nameSpan);
 
+        // 显示哈希值（如果有）
+        if (item.hash) {
+            var hashSpan = document.createElement("span");
+            hashSpan.style.fontSize = "11px";
+            hashSpan.style.color = "var(--text-secondary)";
+            hashSpan.style.fontFamily = "monospace";
+            hashSpan.textContent = "Hash: " + item.hash;
+            infoDiv.appendChild(hashSpan);
+        }
+
         var meta = document.createElement("div");
         meta.className = "history-time";
         // 格式化时间

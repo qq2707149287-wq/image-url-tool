@@ -28,18 +28,67 @@ function initUI() {
             }
         };
     }
+
+    // === 拖拽悬浮自动切换标签页功能 ===
+    var dragHoverTimer = null;
+    var dragHoverTarget = null;
+
+    for (var i = 0; i < tabs.length; i++) {
+        (function (tab) {
+            // 当拖拽文件悬浮在标签按钮上时
+            tab.addEventListener('dragenter', function (e) {
+                e.preventDefault();
+
+                // 如果已经是当前标签，不需要切换
+                if (tab.classList.contains('active')) return;
+
+                // 清除之前的定时器
+                if (dragHoverTimer) {
+                    clearTimeout(dragHoverTimer);
+                }
+
+                dragHoverTarget = tab;
+
+                // 设置定时器，悬浮600ms后自动切换
+                dragHoverTimer = setTimeout(function () {
+                    if (dragHoverTarget === tab) {
+                        switchTab(tab.id);
+                        // 显示提示
+                        if (window.showToast) {
+                            window.showToast("已切换到 " + tab.textContent, "success");
+                        }
+                    }
+                }, 600);
+            });
+
+            tab.addEventListener('dragleave', function (e) {
+                // 清除定时器
+                if (dragHoverTarget === tab) {
+                    if (dragHoverTimer) {
+                        clearTimeout(dragHoverTimer);
+                        dragHoverTimer = null;
+                    }
+                    dragHoverTarget = null;
+                }
+            });
+
+            tab.addEventListener('dragover', function (e) {
+                e.preventDefault(); // 允许drop
+            });
+        })(tabs[i]);
+    }
 }
 
 function switchTab(tabId) {
     var tabs = document.querySelectorAll(".tab");
     for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove("active");
-    
+
     var contents = document.querySelectorAll(".tab-content");
     for (var j = 0; j < contents.length; j++) contents[j].classList.remove("active");
-    
+
     var currentTab = document.getElementById(tabId);
     if (currentTab) currentTab.classList.add("active");
-    
+
     var contentId = tabId.replace("tab-", "content-");
     var content = document.getElementById(contentId);
     if (content) {
@@ -54,32 +103,32 @@ function switchTab(tabId) {
     }
 }
 
-window.showToast = function(message, type) {
+window.showToast = function (message, type) {
     var container = document.getElementById("toast-container");
     if (!container) return;
-    
+
     var toast = document.createElement("div");
     toast.className = "toast " + (type || "success");
-    
+
     var icon = "✅";
     if (type === "error") icon = "❌";
     else if (type === "warning") icon = "⚠️";
-    
+
     var iconSpan = document.createElement("span");
     iconSpan.textContent = icon;
-    
+
     var msgSpan = document.createElement("span");
     msgSpan.textContent = " " + message;
-    
+
     toast.appendChild(iconSpan);
     toast.appendChild(msgSpan);
     container.appendChild(toast);
-    
-    setTimeout(function() {
+
+    setTimeout(function () {
         toast.style.opacity = "0";
         toast.style.transform = "translateX(100%)";
-        setTimeout(function() { 
-            if (container.contains(toast)) container.removeChild(toast); 
+        setTimeout(function () {
+            if (container.contains(toast)) container.removeChild(toast);
         }, 300);
     }, 3000);
 };
