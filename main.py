@@ -14,14 +14,36 @@ import mimetypes
 import sqlite3
 from typing import List
 from pydantic import BaseModel
+import logging
+from dotenv import load_dotenv
 
-# === 0. 核心修复：手动教 Python 认识 AVIF ===
+# === 0. 配置与初始化 ===
+# 加载环境变量
+load_dotenv()
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# 手动教 Python 认识 AVIF
 mimetypes.add_type("image/avif", ".avif")
 mimetypes.add_type("image/heic", ".heic")
 mimetypes.add_type("image/webp", ".webp")
 
-# === 1. 数据库配置 ===
+# 数据库配置
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history.db")
+
+# MinIO 配置 (从环境变量读取)
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME", "images")
+
+if not all([MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY]):
+    logger.warning("⚠️  MinIO 配置缺失！请检查 .env 文件或环境变量。")
 
 def init_db():
     """初始化 SQLite 数据库"""
@@ -39,11 +61,16 @@ def init_db():
                       size INTEGER,
                       content_type TEXT,
                       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+        
+        # [优化] 添加索引以加速搜索
+        c.execute("CREATE INDEX IF NOT EXISTS idx_filename ON history (filename)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_url ON history (url)")
+        
         conn.commit()
         conn.close()
-        print(f"✅ 数据库已就绪: {DB_PATH}")
+        logger.info(f"✅ 数据库已就绪: {DB_PATH}")
     except Exception as e:
-        print(f"❌ 数据库初始化失败: {e}")
+        logger.error(f"❌ 数据库初始化失败: {e}")
 
 def save_to_db(data: dict):
     """保存记录到数据库"""
@@ -69,7 +96,7 @@ def save_to_db(data: dict):
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"❌ 保存到数据库失败: {e}")
+        logger.error(f"❌ 保存到数据库失败: {e}")
 
 # === 2. 获取本机IP地址 ===
 def get_local_ip():
@@ -110,13 +137,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="图片URL获取工具", lifespan=lifespan)
 
-# === 3. MinIO 配置 ===
-MINIO_ENDPOINT = "http://s3.demo.test52dzhp.com"
-MINIO_ACCESS_KEY = "kuByCmeTH1TbzbnW"
-MINIO_SECRET_KEY = "TKhMmKHT0ZbbBlezfMfvaQyhTDEvQGv3"
-MINIO_BUCKET_NAME = "images"
-
-# === 4. 工具函数 (保留) ===
+# === 4. 工具函数 ===
 def calculate_md5(content: bytes) -> str:
     return hashlib.md5(content).hexdigest()
 
@@ -136,9 +157,9 @@ def create_minio_client():
         config=Config(signature_version="s3v4")
     )
 
-# === 5. 上传逻辑 (保留详细日志) ===
+# === 5. 上传逻辑 ===
 def upload_to_minio(data: bytes, name: str, fhash: str):
-    print(f"   [MyCloud] 正在上传 {name[:40]}...")
+    logger.info(f"[MyCloud] 正在上传 {name[:40]}...")
     try:
         s3 = create_minio_client()
         ext = os.path.splitext(name)[1] or ".jpg"
@@ -162,7 +183,7 @@ def upload_to_minio(data: bytes, name: str, fhash: str):
 
         url = f"/mycloud/{key}" # 使用相对路径代理
 
-        print("   ✅ [MyCloud] 成功")
+        logger.info("✅ [MyCloud] 成功")
         return {
             "success": True,
             "service": "MyCloud",
@@ -171,22 +192,22 @@ def upload_to_minio(data: bytes, name: str, fhash: str):
             "content_type": content_type
         }
     except Exception as e:
-        print(f"   ❌ [MyCloud] 错误: {e}")
+        logger.error(f"❌ [MyCloud] 错误: {e}")
         return {
             "success": False,
             "service": "MyCloud",
             "error": str(e)
         }
 
-# === 6. 上传接口 (保留完整的返回结构) ===
+# === 6. 上传接口 ===
+# [优化] 改为同步函数 (def)，让 FastAPI 在线程池中运行它，避免阻塞主线程
 @app.post("/upload")
-async def upload_endpoint(
-    file: UploadFile = File(...),
-    services: str = Form("myminio")
-):
-    print(f"\n📥 收到上传任务: {file.filename}")
+def upload_endpoint(file: UploadFile = File(...)):
+    logger.info(f"📥 收到上传任务: {file.filename}")
     try:
-        content = await file.read()
+        # 注意: file.read() 在同步函数中也是阻塞的，但这里是在线程池中，所以没问题
+        # 如果文件非常大，建议用 spool_max_size 或异步读取后转同步处理
+        content = file.file.read() 
         fhash = calculate_md5(content)
         info = get_image_info(content)
 
@@ -194,14 +215,14 @@ async def upload_endpoint(
         res = upload_to_minio(content, file.filename, fhash)
 
         if not res["success"]:
-            print("❌ 上传失败")
+            logger.error("❌ 上传失败")
             return JSONResponse({
                 "success": False,
                 "error": res.get("error", "上传失败"),
                 "failed_list": [{"service": "MyCloud", "error": res.get("error")}]
             })
         
-        print("✨ 任务完成")
+        logger.info("✨ 任务完成")
         
         # 如果文件名是默认的image.png，使用hash作为文件名
         display_filename = file.filename if file.filename != 'image.png' else fhash
@@ -226,14 +247,15 @@ async def upload_endpoint(
         return JSONResponse(result_data)
 
     except Exception as e:
+        logger.error(f"上传异常: {e}")
         traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"success": False, "error": str(e)}
         )
 
-# === 7. 图片代理接口 (针对 AVIF 做了增强) ===
-# MIME类型映射表（确保所有图片格式都能正确识别）
+# === 7. 图片代理接口 ===
+# MIME类型映射表
 MIME_TYPE_MAP = {
     ".avif": "image/avif",
     ".webp": "image/webp",
@@ -251,7 +273,7 @@ MIME_TYPE_MAP = {
 @app.get("/mycloud/{object_name:path}")
 def get_mycloud_image(object_name: str):
     """
-    代理 MinIO 图片请求，解决证书错误和自动下载问题
+    代理 MinIO 图片请求
     """
     try:
         s3 = create_minio_client()
@@ -262,19 +284,17 @@ def get_mycloud_image(object_name: str):
         lower_name = object_name.lower()
         ext = os.path.splitext(lower_name)[1]
 
-        # 2. 优先使用我们的映射表（比mimetypes更可靠）
+        # 2. 优先使用我们的映射表
         content_type = MIME_TYPE_MAP.get(ext)
 
-        # 3. 如果映射表没有，尝试mimetypes
+        # 3. 尝试mimetypes
         if not content_type:
             content_type, _ = mimetypes.guess_type(object_name)
 
-        # 4. 最后兜底
+        # 4. 兜底
         if not content_type:
             content_type = obj.get("ContentType", "application/octet-stream")
 
-        # 5. 强制设置响应头，确保浏览器预览而非下载
-        # X-Content-Type-Options: nosniff 防止浏览器猜测类型
         headers = {
             "Content-Disposition": "inline",
             "Content-Type": content_type,
@@ -282,18 +302,16 @@ def get_mycloud_image(object_name: str):
             "X-Content-Type-Options": "nosniff",
         }
 
-        print(f"   📤 返回图片: {object_name} (Content-Type: {content_type})")
-
         return StreamingResponse(body, media_type=content_type, headers=headers)
     except Exception as e:
-        print(f"   ❌ 读取 MyCloud 对象失败: {e}")
+        logger.warning(f"❌ 读取 MyCloud 对象失败: {e}")
         raise HTTPException(status_code=404, detail="Image not found")
 
-# === 8. 验证接口 (保留) ===
+# === 8. 验证接口 ===
 @app.post("/validate")
 async def val(d: dict):
     url = d.get("url")
-    print(f"验证 URL 请求: {url}")
+    logger.info(f"验证 URL 请求: {url}")
     return {"success": True, "url": url}
 
 # === 9. 历史记录接口 ===
@@ -333,6 +351,7 @@ def get_history(page: int = 1, page_size: int = 20, keyword: str = ""):
         data = [dict(row) for row in rows]
         return {"success": True, "data": data, "total": total, "page": page, "page_size": page_size}
     except Exception as e:
+        logger.error(f"获取历史记录失败: {e}")
         return {"success": False, "error": str(e)}
 
 class DeleteRequest(BaseModel):
@@ -367,8 +386,9 @@ def clear_history():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+# [优化] 改为同步函数
 @app.post("/history/rename")
-async def rename_history(body: dict):
+def rename_history(body: dict):
     """重命名历史记录"""
     try:
         url = body.get("url")
@@ -397,17 +417,17 @@ async def rename_history(body: dict):
         conn.close()
         
         if affected > 0:
-            print(f"✅ 重命名成功: {url} -> {filename}")
+            logger.info(f"✅ 重命名成功: {url} -> {filename}")
             return JSONResponse({"success": True})
         else:
-            print(f"❌ 重命名失败: 未找到匹配的记录 (URL: {url})")
+            logger.warning(f"❌ 重命名失败: 未找到匹配的记录 (URL: {url})")
             return JSONResponse({"success": False, "error": "未找到匹配的记录"})
     except Exception as e:
-        print(f"❌ 重命名失败: {e}")
+        logger.error(f"❌ 重命名失败: {e}")
         traceback.print_exc()
         return JSONResponse({"success": False, "error": str(e)})
 
-# === 10. 静态文件与首页 (保留) ===
+# === 10. 静态文件与首页 ===
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 @app.get("/")
@@ -420,6 +440,6 @@ if __name__ == "__main__":
         app,
         host="0.0.0.0",
         port=8000,
-        log_level="warning",
+        log_level="info",
         access_log=False
     )

@@ -319,7 +319,7 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
             var formData = new FormData();
             formData.append('file', file);
-            formData.append('services', 'myminio');
+            // formData.append('services', 'myminio'); // 后端已优化，不再需要此参数
 
             bar.style.width = '50%';
             var resp = await fetch('/upload', { method: 'POST', body: formData });
