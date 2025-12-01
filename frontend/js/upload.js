@@ -388,9 +388,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // === 粘贴上传功能 ===
-    // 为上传区域添加粘贴事件监听
-    if (dropArea) {
-        dropArea.addEventListener('paste', async function (e) {
+    // 为整个上传标签页添加粘贴事件监听（无需点击上传区域）
+    var uploadContent = document.getElementById('content-upload');
+    if (uploadContent) {
+        uploadContent.addEventListener('paste', async function (e) {
             e.preventDefault();
 
             var items = (e.clipboardData || e.originalEvent.clipboardData).items;
@@ -424,8 +425,5 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (window.showToast) window.showToast("剪贴板中没有图片", "warning");
             }
         });
-
-        // 确保上传区域可以获得焦点
-        dropArea.setAttribute('tabindex', '0');
     }
 });
