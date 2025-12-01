@@ -24,9 +24,12 @@ function cleanDataForExport(dataList) {
             cleanItem.url = fullUrl;
         }
         if (item.filename) cleanItem.filename = item.filename;
-        if (item.width) cleanItem.width = item.width;
-        if (item.height) cleanItem.height = item.height;
-        if (item.size) cleanItem.size = item.size;
+
+        // 添加带单位的文件大小
+        if (item.size) {
+            var sizeInKB = (item.size / 1024).toFixed(2);
+            cleanItem.size = sizeInKB + ' KB';
+        }
 
         // 提取 content_type
         if (item.content_type) {
@@ -35,7 +38,7 @@ function cleanDataForExport(dataList) {
             cleanItem.content_type = item.all_results[0].content_type;
         }
 
-        // 移除 service, time, hash, linkstatus (不添加即可)
+        // 移除 service, time, hash, linkstatus, width, height (不添加即可)
 
         result.push(cleanItem);
     }
@@ -211,7 +214,7 @@ document.addEventListener("DOMContentLoaded", function () {
             // 简单处理时间显示
             timeStr = timeStr.replace("T", " ").split(".")[0];
         } catch (e) { }
-        meta.textContent = timeStr + " · " + (item.service || "MyCloud");
+        meta.textContent = timeStr;
         infoDiv.appendChild(meta);
 
         // 按钮组

@@ -12,7 +12,7 @@
     <div class="container">
         <div class="header">
             <h1>私有云图床</h1>
-            <p class="subtitle">MyCloud 专用 · 永久存储 · 批量处理</p>
+            <p class="subtitle">永久存储 · 批量处理</p>
             <div class="header-tools">
                 <button class="btn-ghost" id="themeToggle">🌙 深色模式</button>
             </div>
@@ -28,7 +28,6 @@
         <div id="content-upload" class="tab-content active">
             <div id="uploadArea" class="upload-area">
                 <p>点击或拖拽多张图片到这里</p>
-                <p class="hint">所有图片统一上传到 MyCloud</p>
             </div>
 
             <input type="file" id="fileInput" accept="image/*" multiple hidden>
@@ -43,7 +42,7 @@
                 <div class="multi-actions" style="display:flex; gap:10px; align-items:center;">
                     <span style="font-size:13px; color:var(--text-secondary);">已选 <b
                             id="uploadSelectedCount">0</b></span>
-                    <button class="btn-mini" id="uploadBatchGenBtn">生成说明文件</button>
+                    <button class="btn-mini" id="uploadBatchGenBtn">生成json文件</button>
                     <button class="btn-mini" id="uploadBatchDelBtn"
                         style="color:var(--danger); border-color:var(--danger);">移除</button>
                 </div>
@@ -111,7 +110,7 @@
                 <div class="multi-actions" id="multiActions" style="display:none;">
                     <span style="font-size:13px; color:var(--text-secondary); margin-right:10px;">已选 <b
                             id="selectedCount">0</b> 项</span>
-                    <button class="btn-mini" id="batchGenerateDescBtn">生成说明文件</button>
+                    <button class="btn-mini" id="batchGenerateDescBtn">生成json文件</button>
                     <button class="btn-mini" id="batchDeleteBtn"
                         style="color:var(--danger); border-color:var(--danger);">删除</button>
                 </div>
@@ -143,7 +142,7 @@
     <div id="descModal" class="modal-backdrop">
         <div class="modal-content">
             <div class="modal-header">
-                <span class="modal-title">生成的说明文件</span>
+                <span class="modal-title">生成的JSON文件</span>
                 <button class="modal-close"
                     onclick="document.getElementById('descModal').style.display='none'">×</button>
             </div>

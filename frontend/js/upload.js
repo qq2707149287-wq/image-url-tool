@@ -30,9 +30,12 @@ function cleanUploadDataForExport(dataList) {
 
         if (item.url) cleanItem.url = getFullUrl(item.url);
         if (item.filename) cleanItem.filename = item.filename;
-        if (item.width) cleanItem.width = item.width;
-        if (item.height) cleanItem.height = item.height;
-        if (item.size) cleanItem.size = item.size;
+
+        // 添加带单位的文件大小
+        if (item.size) {
+            var sizeInKB = (item.size / 1024).toFixed(2);
+            cleanItem.size = sizeInKB + ' KB';
+        }
 
         if (item.content_type) {
             cleanItem.content_type = item.content_type;
@@ -174,12 +177,6 @@ document.addEventListener('DOMContentLoaded', function () {
         nameSpan.className = 'history-name';
         nameSpan.innerText = name;
 
-        var badge = document.createElement('span');
-        badge.className = 'source-badge';
-        badge.style.color = 'green';
-        badge.style.background = '#ecfdf5';
-        badge.innerText = 'MyCloud';
-
         // 显示大小
         var sizeSpan = document.createElement('span');
         sizeSpan.style.fontSize = '12px';
@@ -190,7 +187,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         infoDiv.appendChild(nameSpan);
-        infoDiv.appendChild(badge);
         infoDiv.appendChild(sizeSpan);
 
         var actions = document.createElement('div');

@@ -233,6 +233,21 @@ async def upload_endpoint(
         )
 
 # === 7. 图片代理接口 (针对 AVIF 做了增强) ===
+# MIME类型映射表（确保所有图片格式都能正确识别）
+MIME_TYPE_MAP = {
+    ".avif": "image/avif",
+    ".webp": "image/webp",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+}
+
 @app.get("/mycloud/{object_name:path}")
 def get_mycloud_image(object_name: str):
     """
@@ -242,26 +257,32 @@ def get_mycloud_image(object_name: str):
         s3 = create_minio_client()
         obj = s3.get_object(Bucket=MINIO_BUCKET_NAME, Key=object_name)
         body = obj["Body"]
-        
-        # 1. 尝试猜测类型 (因为开头手动 add_type 了，现在应该能认出 avif)
-        content_type, _ = mimetypes.guess_type(object_name)
-        
-        # 2. 双重保险：如果系统还是笨笨的，我们人工指定
+
+        # 1. 获取文件扩展名并确定MIME类型
+        lower_name = object_name.lower()
+        ext = os.path.splitext(lower_name)[1]
+
+        # 2. 优先使用我们的映射表（比mimetypes更可靠）
+        content_type = MIME_TYPE_MAP.get(ext)
+
+        # 3. 如果映射表没有，尝试mimetypes
         if not content_type:
-            lower_name = object_name.lower()
-            if lower_name.endswith(".avif"):
-                content_type = "image/avif"
-            elif lower_name.endswith(".webp"):
-                content_type = "image/webp"
-            else:
-                content_type = obj.get("ContentType", "image/jpeg")
-            
-        # 3. 强制设置响应头，禁止下载，强制预览
+            content_type, _ = mimetypes.guess_type(object_name)
+
+        # 4. 最后兜底
+        if not content_type:
+            content_type = obj.get("ContentType", "application/octet-stream")
+
+        # 5. 强制设置响应头，确保浏览器预览而非下载
+        # X-Content-Type-Options: nosniff 防止浏览器猜测类型
         headers = {
             "Content-Disposition": "inline",
             "Content-Type": content_type,
-            "Cache-Control": "public, max-age=31536000"
+            "Cache-Control": "public, max-age=31536000",
+            "X-Content-Type-Options": "nosniff",
         }
+
+        print(f"   📤 返回图片: {object_name} (Content-Type: {content_type})")
 
         return StreamingResponse(body, media_type=content_type, headers=headers)
     except Exception as e:

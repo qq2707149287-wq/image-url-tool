@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', function () {
         data.filename = displayName;
 
         setPreview(fullUrl);
-        if (serviceBadge) serviceBadge.textContent = data.service || 'MyCloud';
+        if (serviceBadge) serviceBadge.style.display = 'none'; // 隐藏服务标签
         if (resultLinkEl) {
             resultLinkEl.textContent = fullUrl;
             resultLinkEl.href = fullUrl;
@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function () {
             fakeRes.filename = displayName;
 
             setPreview(url);
-            if (serviceBadge) serviceBadge.textContent = '网页图片';
+            if (serviceBadge) serviceBadge.style.display = 'none'; // 隐藏服务标签
             if (resultLinkEl) {
                 resultLinkEl.textContent = url;
                 resultLinkEl.href = url;
