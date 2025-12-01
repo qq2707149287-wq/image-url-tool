@@ -139,6 +139,20 @@ document.addEventListener('DOMContentLoaded', function () {
     function createResultCard(data) {
         var div = document.createElement('div');
         div.className = 'history-card';
+
+        // 错误状态处理
+        if (data.isError) {
+            div.style.borderColor = 'red';
+            div.innerHTML =
+                '<div class="history-main-row" style="padding-left:12px">' +
+                '<div class="history-info">' +
+                '<span class="history-name">' + (data.filename || '未知文件') + '</span>' +
+                '<div style="color:red;font-size:12px;">上传失败: ' + (data.error || '未知错误') + '</div>' +
+                '</div>' +
+                '</div>';
+            return div;
+        }
+
         if (window.uploadSelectedHashes.has(data.hash)) {
             div.classList.add('selected');
         }
@@ -350,18 +364,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     // 刷新历史记录 (如果已加载)
                     if (typeof window.displayHistory === 'function') window.displayHistory();
                 } else {
-                    // 错误卡片
-                    var div = document.createElement('div');
-                    div.className = 'history-card';
-                    div.style.borderColor = 'red';
-                    div.innerHTML =
-                        '<div class="history-main-row" style="padding-left:12px">' +
-                        '<div class="history-info">' +
-                        '<span class="history-name">' + file.name + '</span>' +
-                        '<div style="color:red;font-size:12px;">上传失败: ' + (res.error || '未知') + '</div>' +
-                        '</div>' +
-                        '</div>';
-                    batchList.insertBefore(div, batchList.firstChild);
+                    // 错误卡片 - 添加到列表数据中，而不是直接操作DOM
+                    window.allUploadResults.unshift({
+                        isError: true,
+                        filename: file.name,
+                        error: res.error || '未知错误',
+                        hash: 'error_' + Date.now() + Math.random() // 唯一ID防止冲突
+                    });
                 }
 
                 window.renderUploadList();
