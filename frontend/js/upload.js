@@ -31,6 +31,10 @@ function cleanUploadDataForExport(dataList) {
         if (item.url) cleanItem.url = getFullUrl(item.url);
         if (item.filename) cleanItem.filename = item.filename;
 
+        // 添加宽度和高度
+        if (item.width) cleanItem.width = item.width;
+        if (item.height) cleanItem.height = item.height;
+
         // 添加带单位的文件大小
         if (item.size) {
             var sizeInKB = (item.size / 1024).toFixed(2);
@@ -381,5 +385,47 @@ document.addEventListener('DOMContentLoaded', function () {
             if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
             if (window.showToast) window.showToast("上传异常: " + e.message, "error");
         }
+    }
+
+    // === 粘贴上传功能 ===
+    // 为上传区域添加粘贴事件监听
+    if (dropArea) {
+        dropArea.addEventListener('paste', async function (e) {
+            e.preventDefault();
+
+            var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            var hasImage = false;
+
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i];
+
+                // 处理图片文件
+                if (item.type.indexOf('image') !== -1) {
+                    hasImage = true;
+                    var blob = item.getAsFile();
+                    if (blob) {
+                        // 创建一个File对象
+                        var file = new File([blob], 'image.png', { type: blob.type });
+                        uploadFile(file);
+                    }
+                }
+                // 处理文本（可能是URL）
+                else if (item.type === 'text/plain') {
+                    item.getAsString(function (text) {
+                        if (/^https?:\/\//i.test(text.trim())) {
+                            // 这是一个URL，可以选择处理或忽略
+                            if (window.showToast) window.showToast("检测到URL，请直接粘贴图片", "warning");
+                        }
+                    });
+                }
+            }
+
+            if (!hasImage) {
+                if (window.showToast) window.showToast("剪贴板中没有图片", "warning");
+            }
+        });
+
+        // 确保上传区域可以获得焦点
+        dropArea.setAttribute('tabindex', '0');
     }
 });

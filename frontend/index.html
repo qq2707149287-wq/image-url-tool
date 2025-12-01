@@ -19,15 +19,14 @@
         </div>
 
         <div class="tabs">
-            <button class="tab active" id="tab-upload">批量上传</button>
-            <button class="tab" id="tab-paste">粘贴上传</button>
+            <button class="tab active" id="tab-upload">上传</button>
             <button class="tab" id="tab-history">历史记录</button>
         </div>
 
         <!-- 1. 批量上传页 -->
         <div id="content-upload" class="tab-content active">
-            <div id="uploadArea" class="upload-area">
-                <p>点击或拖拽多张图片到这里</p>
+            <div id="uploadArea" class="upload-area" tabindex="0">
+                <p>点击、拖拽或 Ctrl+V 粘贴图片到这里</p>
             </div>
 
             <input type="file" id="fileInput" accept="image/*" multiple hidden>
@@ -52,34 +51,9 @@
             <div id="uploadBatchList" class="batch-list"></div>
         </div>
 
-        <!-- 2. 粘贴上传页 -->
-        <div id="content-paste" class="tab-content">
-            <div id="pasteArea" class="paste-area" tabindex="0">
-                <p>Ctrl + V 在此处粘贴图片</p>
-            </div>
-            <img id="pastePreview" class="preview-img">
-            <div id="pasteLoading" class="loading" style="display:none;">
-                <div class="spinner"></div>
-                <p>处理中...</p>
-            </div>
 
-            <div id="pasteResult" class="result-box">
-                <h3>上传成功</h3>
-                <span id="pasteServiceBadge" class="service-badge"></span>
-                <div class="url-box"><a id="pasteResultUrl" target="_blank"></a></div>
-                <div class="action-buttons">
-                    <button class="copy-btn" id="pasteCopyBtn">复制</button>
-                    <button class="copy-btn" id="pasteOpenBtn">打开</button>
-                </div>
-                <div class="rename-box" style="margin-top:10px; display:flex; gap:8px; align-items:center;">
-                    <span>图片名称:</span>
-                    <input type="text" id="pasteFilenameInput" class="input-text" style="flex:1;">
-                    <button class="btn-mini" id="pasteRenameSaveBtn">保存名称</button>
-                </div>
-            </div>
-        </div>
 
-        <!-- 3. 历史记录页 -->
+        <!-- 2. 历史记录页 -->
         <div id="content-history" class="tab-content">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
                 <h3>历史记录</h3>
@@ -161,7 +135,6 @@
     <script src="/static/js/ui.js?v=1.1" defer></script>
     <script src="/static/js/core.js?v=1.1" defer></script>
     <script src="/static/js/upload.js?v=1.1" defer></script>
-    <script src="/static/js/paste.js?v=1.1" defer></script>
     <script src="/static/js/history.js?v=1.1" defer></script>
 </body>
 

@@ -25,6 +25,10 @@ function cleanDataForExport(dataList) {
         }
         if (item.filename) cleanItem.filename = item.filename;
 
+        // 添加宽度和高度
+        if (item.width) cleanItem.width = item.width;
+        if (item.height) cleanItem.height = item.height;
+
         // 添加带单位的文件大小
         if (item.size) {
             var sizeInKB = (item.size / 1024).toFixed(2);
@@ -38,7 +42,7 @@ function cleanDataForExport(dataList) {
             cleanItem.content_type = item.all_results[0].content_type;
         }
 
-        // 移除 service, time, hash, linkstatus, width, height (不添加即可)
+        // 移除 service, time, hash, linkstatus (不添加即可)
 
         result.push(cleanItem);
     }
