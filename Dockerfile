@@ -25,5 +25,22 @@ EXPOSE 8000
 HEALTHCHECK --interval=5s --timeout=3s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')" || exit 1
 
+# ============ Traefik 标签配置 (Coolify v4.0.0-beta.442) ============
+# 用于正确处理 AVIF 等图片格式的响应头，防止浏览器下载而非预览
+LABEL traefik.enable="true"
+LABEL traefik.http.routers.app.rule="Host(\`${COOLIFY_FQDN}\`)"
+LABEL traefik.http.routers.app.entrypoints="websecure"
+LABEL traefik.http.routers.app.tls.certresolver="letsencrypt"
+LABEL traefik.http.services.app.loadbalancer.server.port="8000"
+
+# 自定义响应头中间件 - 确保 AVIF 等格式正确显示
+LABEL traefik.http.middlewares.image-headers.headers.customresponseheaders.Content-Disposition="inline"
+LABEL traefik.http.middlewares.image-headers.headers.customresponseheaders.X-Content-Type-Options="nosniff"
+LABEL traefik.http.middlewares.image-headers.headers.customresponseheaders.Cache-Control="public, max-age=31536000"
+
+# 应用中间件到路由
+LABEL traefik.http.routers.app.middlewares="image-headers@docker"
+# =====================================================================
+
 # 启动命令
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
