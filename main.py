@@ -1,23 +1,37 @@
 import socket
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
-from PIL import Image
-from io import BytesIO
 import os
 import hashlib
-import boto3
-from botocore.client import Config
-import traceback
-import mimetypes 
-import sqlite3
-from typing import List
-from pydantic import BaseModel
+import mimetypes
 import logging
+from io import BytesIO
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from PIL import Image
 from dotenv import load_dotenv
 
-# === 0. 配置与初始化 ===
+# 导入项目模块
+import database
+import storage
+import schemas
+
+# ==================== 配置常量 ====================
+
+# 服务器配置
+DEFAULT_PORT = 8000
+DEFAULT_HOST = "0.0.0.0"
+
+# 文件上传限制
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.heic', '.heif', '.bmp', '.svg', '.ico'}
+
+# 缓存配置
+CACHE_MAX_AGE = 31536000  # 1年
+
+# ==================== 初始化 ====================
+
 # 加载环境变量
 load_dotenv()
 
@@ -28,100 +42,120 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 手动教 Python 认识 AVIF
+# 注册额外的 MIME 类型
 mimetypes.add_type("image/avif", ".avif")
 mimetypes.add_type("image/heic", ".heic")
 mimetypes.add_type("image/webp", ".webp")
 
-# 数据库配置
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history.db")
+# ==================== 工具函数 ====================
 
-# MinIO 配置 (从环境变量读取)
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
-MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME", "images")
-
-if not all([MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY]):
-    logger.warning("⚠️  MinIO 配置缺失！请检查 .env 文件或环境变量。")
-
-def init_db():
-    """初始化 SQLite 数据库"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS history
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      url TEXT NOT NULL,
-                      filename TEXT,
-                      hash TEXT,
-                      service TEXT,
-                      width INTEGER,
-                      height INTEGER,
-                      size INTEGER,
-                      content_type TEXT,
-                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-        
-        # [优化] 添加索引以加速搜索
-        c.execute("CREATE INDEX IF NOT EXISTS idx_filename ON history (filename)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_url ON history (url)")
-        
-        conn.commit()
-        conn.close()
-        logger.info(f"✅ 数据库已就绪: {DB_PATH}")
-    except Exception as e:
-        logger.error(f"❌ 数据库初始化失败: {e}")
-
-def save_to_db(data: dict):
-    """保存记录到数据库"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        # 检查是否已存在 (根据 hash)
-        c.execute("SELECT id FROM history WHERE hash = ?", (data.get("hash"),))
-        if c.fetchone():
-            # 更新现有记录
-            c.execute('''UPDATE history SET 
-                         url=?, filename=?, service=?, width=?, height=?, size=?, content_type=?, created_at=CURRENT_TIMESTAMP
-                         WHERE hash=?''',
-                      (data.get("url"), data.get("filename"), data.get("service"),
-                       data.get("width"), data.get("height"), data.get("size"), data.get("content_type"),
-                       data.get("hash")))
-        else:
-            # 插入新记录
-            c.execute('''INSERT INTO history (url, filename, hash, service, width, height, size, content_type)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                      (data.get("url"), data.get("filename"), data.get("hash"), data.get("service"),
-                       data.get("width"), data.get("height"), data.get("size"), data.get("content_type")))
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logger.error(f"❌ 保存到数据库失败: {e}")
-
-# === 2. 获取本机IP地址 ===
-def get_local_ip():
+def get_local_ip() -> str:
+    """获取本机局域网 IP 地址"""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
         return ip
-    except:
+    except OSError:
         return "127.0.0.1"
 
-# === 3. 生命周期事件处理器 ===
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_db()  # 初始化数据库
-    local_ip = get_local_ip()
-    port = 8000
 
-    print("\n" + "="*60)
+def calculate_hash(content: bytes) -> str:
+    """计算文件内容的 SHA-256 哈希值（取前32位）"""
+    return hashlib.sha256(content).hexdigest()[:32]
+
+
+def get_image_info(content: bytes) -> dict[str, int]:
+    """获取图片尺寸和大小信息"""
+    try:
+        img = Image.open(BytesIO(content))
+        return {"width": img.width, "height": img.height, "size": len(content)}
+    except Exception:
+        # 无法解析图片时返回默认值
+        return {"width": 0, "height": 0, "size": len(content)}
+
+
+def validate_file_upload(filename: str, content: bytes) -> None:
+    """
+    验证上传文件的安全性
+
+    Args:
+        filename: 文件名
+        content: 文件内容
+
+    Raises:
+        HTTPException: 文件验证失败时抛出
+    """
+    # 检查文件大小
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件过大，最大允许 {MAX_FILE_SIZE // (1024*1024)}MB"
+        )
+
+    # 检查文件扩展名
+    ext = os.path.splitext(filename or '')[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型: {ext}，允许的类型: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        )
+
+
+def validate_object_path(object_name: str) -> None:
+    """
+    验证对象路径，防止路径遍历攻击
+
+    Args:
+        object_name: 对象路径名
+
+    Raises:
+        HTTPException: 路径不安全时抛出
+    """
+    if '..' in object_name or object_name.startswith('/') or object_name.startswith('\\'):
+        raise HTTPException(status_code=400, detail="非法路径")
+
+
+def build_upload_response(
+    filename: str,
+    fhash: str,
+    upload_result: dict,
+    image_info: dict
+) -> dict:
+    """构建上传成功的响应数据"""
+    # 如果文件名是默认的 image.png，使用 hash 作为文件名
+    display_filename = filename if filename != 'image.png' else fhash
+
+    return {
+        "success": True,
+        "filename": display_filename,
+        "hash": fhash,
+        "url": upload_result["url"],
+        "service": upload_result["service"],
+        "all_results": [upload_result],
+        "failed_list": [],
+        "width": image_info["width"],
+        "height": image_info["height"],
+        "size": image_info["size"],
+        "content_type": upload_result["content_type"]
+    }
+
+
+# ==================== 生命周期事件 ====================
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """应用生命周期管理"""
+    database.init_db()
+    local_ip = get_local_ip()
+
+    print("\n" + "=" * 60)
     print(f"✅ 服务器启动成功！ (Host IP: {local_ip})")
-    print("="*60)
+    print("=" * 60)
     print("📍 访问地址:")
-    print(f"   • http://localhost:{port}")
-    print(f"   • http://{local_ip}:{port}")
+    print(f"   • http://localhost:{DEFAULT_PORT}")
+    print(f"   • http://{local_ip}:{DEFAULT_PORT}")
     print("")
     print("💡 使用说明:")
     print("   1. 在浏览器中打开上述任一地址")
@@ -129,90 +163,40 @@ async def lifespan(app: FastAPI):
     print("   3. 自动上传至 MyCloud 并生成预览链接")
     print("")
     print("⚠️  按 Ctrl+C 可停止服务器")
-    print("="*60 + "\n")
-    
+    print("=" * 60 + "\n")
+
     yield
-    
+
     print("\n👋 服务器已停止\n")
+
 
 app = FastAPI(title="图片URL获取工具", lifespan=lifespan)
 
-# === 4. 工具函数 ===
-def calculate_md5(content: bytes) -> str:
-    return hashlib.md5(content).hexdigest()
+# ==================== 上传接口 ====================
 
-def get_image_info(content: bytes):
-    try:
-        img = Image.open(BytesIO(content))
-        return {"width": img.width, "height": img.height, "size": len(content)}
-    except:
-        return {"width": 0, "height": len(content), "size": len(content)}
-
-def create_minio_client():
-    return boto3.client(
-        "s3",
-        endpoint_url=MINIO_ENDPOINT,
-        aws_access_key_id=MINIO_ACCESS_KEY,
-        aws_secret_access_key=MINIO_SECRET_KEY,
-        config=Config(signature_version="s3v4")
-    )
-
-# === 5. 上传逻辑 ===
-def upload_to_minio(data: bytes, name: str, fhash: str):
-    logger.info(f"[MyCloud] 正在上传 {name[:40]}...")
-    try:
-        s3 = create_minio_client()
-        ext = os.path.splitext(name)[1] or ".jpg"
-        key = f"{fhash}{ext}"
-        
-        # [优化] 上传时尽量猜对类型
-        content_type, _ = mimetypes.guess_type(name)
-        if not content_type:
-            # 针对 AVIF 的额外补丁
-            if name.lower().endswith('.avif'):
-                content_type = 'image/avif'
-            else:
-                content_type = "application/octet-stream"
-
-        s3.put_object(
-            Bucket=MINIO_BUCKET_NAME,
-            Key=key,
-            Body=data,
-            ContentType=content_type
-        )
-
-        url = f"/mycloud/{key}" # 使用相对路径代理
-
-        logger.info("✅ [MyCloud] 成功")
-        return {
-            "success": True,
-            "service": "MyCloud",
-            "url": url,
-            "key": key,
-            "content_type": content_type
-        }
-    except Exception as e:
-        logger.error(f"❌ [MyCloud] 错误: {e}")
-        return {
-            "success": False,
-            "service": "MyCloud",
-            "error": str(e)
-        }
-
-# === 6. 上传接口 ===
-# [优化] 改为同步函数 (def)，让 FastAPI 在线程池中运行它，避免阻塞主线程
 @app.post("/upload")
-def upload_endpoint(file: UploadFile = File(...)):
+def upload_endpoint(file: UploadFile = File(...)) -> JSONResponse:
+    """
+    上传图片文件
+
+    - 支持格式: jpg, jpeg, png, gif, webp, avif, heic, heif, bmp, svg, ico
+    - 最大文件大小: 10MB
+    """
     logger.info(f"📥 收到上传任务: {file.filename}")
+
     try:
-        # 注意: file.read() 在同步函数中也是阻塞的，但这里是在线程池中，所以没问题
-        # 如果文件非常大，建议用 spool_max_size 或异步读取后转同步处理
-        content = file.file.read() 
-        fhash = calculate_md5(content)
+        # 读取文件内容
+        content = file.file.read()
+
+        # 安全验证：检查文件类型和大小
+        validate_file_upload(file.filename or '', content)
+
+        # 计算文件哈希
+        fhash = calculate_hash(content)
         info = get_image_info(content)
 
-        # 核心上传
-        res = upload_to_minio(content, file.filename, fhash)
+        # 上传到存储服务
+        res = storage.upload_to_minio(content, file.filename or '', fhash)
 
         if not res["success"]:
             logger.error("❌ 上传失败")
@@ -221,41 +205,32 @@ def upload_endpoint(file: UploadFile = File(...)):
                 "error": res.get("error", "上传失败"),
                 "failed_list": [{"service": "MyCloud", "error": res.get("error")}]
             })
-        
-        logger.info("✨ 任务完成")
-        
-        # 如果文件名是默认的image.png，使用hash作为文件名
-        display_filename = file.filename if file.filename != 'image.png' else fhash
-        
-        result_data = {
-            "success": True,
-            "filename": display_filename,
-            "hash": fhash,
-            "url": res["url"],
-            "service": res["service"],
-            "all_results": [res], 
-            "failed_list": [],
-            "width": info["width"],
-            "height": info["height"],
-            "size": info["size"],
-            "content_type": res["content_type"]
-        }
-        
-        # 保存到数据库
-        save_to_db(result_data)
-        
-        return JSONResponse(result_data)
 
-    except Exception as e:
-        logger.error(f"上传异常: {e}")
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
+        logger.info("✨ 任务完成")
+
+        # 构建响应数据
+        result_data = build_upload_response(
+            file.filename or '', fhash, res, info
         )
 
-# === 7. 图片代理接口 ===
-# MIME类型映射表
+        # 保存到数据库
+        database.save_to_db(result_data)
+
+        return JSONResponse(result_data)
+
+    except HTTPException:
+        # 重新抛出 HTTPException，让 FastAPI 处理
+        raise
+    except Exception as e:
+        logger.error(f"上传异常: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": "服务器内部错误"}
+        )
+
+# ==================== 图片代理接口 ====================
+
+# MIME 类型映射表
 MIME_TYPE_MAP = {
     ".avif": "image/avif",
     ".webp": "image/webp",
@@ -270,176 +245,126 @@ MIME_TYPE_MAP = {
     ".ico": "image/x-icon",
 }
 
+
 @app.get("/mycloud/{object_name:path}")
-def get_mycloud_image(object_name: str):
-    """
-    代理 MinIO 图片请求
-    """
+def get_mycloud_image(object_name: str) -> StreamingResponse:
+    """代理 MinIO 图片请求"""
+    # 安全验证：防止路径遍历攻击
+    validate_object_path(object_name)
+
     try:
-        s3 = create_minio_client()
-        obj = s3.get_object(Bucket=MINIO_BUCKET_NAME, Key=object_name)
+        obj = storage.get_minio_object(object_name)
         body = obj["Body"]
 
-        # 1. 获取文件扩展名并确定MIME类型
+        # 获取文件扩展名并确定 MIME 类型
         lower_name = object_name.lower()
         ext = os.path.splitext(lower_name)[1]
 
-        # 2. 优先使用我们的映射表
+        # 优先使用映射表，然后尝试 mimetypes，最后使用默认值
         content_type = MIME_TYPE_MAP.get(ext)
-
-        # 3. 尝试mimetypes
         if not content_type:
             content_type, _ = mimetypes.guess_type(object_name)
-
-        # 4. 兜底
         if not content_type:
             content_type = obj.get("ContentType", "application/octet-stream")
 
         headers = {
             "Content-Disposition": "inline",
             "Content-Type": content_type,
-            "Cache-Control": "public, max-age=31536000",
+            "Cache-Control": f"public, max-age={CACHE_MAX_AGE}",
             "X-Content-Type-Options": "nosniff",
         }
 
         return StreamingResponse(body, media_type=content_type, headers=headers)
-    except Exception as e:
-        logger.warning(f"❌ 读取 MyCloud 对象失败: {e}")
-        raise HTTPException(status_code=404, detail="Image not found")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=404, detail="图片未找到")
 
-# === 8. 验证接口 ===
+
+# ==================== 验证接口 ====================
+
 @app.post("/validate")
-async def val(d: dict):
-    url = d.get("url")
+def validate_url(request: schemas.ValidateRequest) -> dict:
+    """
+    验证图片 URL 的有效性
+
+    检查 URL 格式是否正确，以及是否指向有效的图片资源
+    """
+    url = request.url.strip()
+
+    # 基本 URL 格式验证
+    if not url:
+        return {"success": False, "error": "URL 不能为空", "url": url}
+
+    # 检查 URL 格式
+    if not (url.startswith('http://') or url.startswith('https://') or url.startswith('/')):
+        return {"success": False, "error": "无效的 URL 格式", "url": url}
+
     logger.info(f"验证 URL 请求: {url}")
     return {"success": True, "url": url}
 
-# === 9. 历史记录接口 ===
-@app.get("/history")
-def get_history(page: int = 1, page_size: int = 20, keyword: str = ""):
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        
-        offset = (page - 1) * page_size
-        query = "SELECT * FROM history"
-        params = []
-        
-        if keyword:
-            query += " WHERE filename LIKE ? OR url LIKE ?"
-            params.extend([f"%{keyword}%", f"%{keyword}%"])
-            
-        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        params.extend([page_size, offset])
-        
-        c.execute(query, params)
-        rows = c.fetchall()
-        
-        # 获取总数
-        count_query = "SELECT COUNT(*) FROM history"
-        count_params = []
-        if keyword:
-            count_query += " WHERE filename LIKE ? OR url LIKE ?"
-            count_params.extend([f"%{keyword}%", f"%{keyword}%"])
-            
-        c.execute(count_query, count_params)
-        total = c.fetchone()[0]
-        
-        conn.close()
-        
-        data = [dict(row) for row in rows]
-        return {"success": True, "data": data, "total": total, "page": page, "page_size": page_size}
-    except Exception as e:
-        logger.error(f"获取历史记录失败: {e}")
-        return {"success": False, "error": str(e)}
+# ==================== 历史记录接口 ====================
 
-class DeleteRequest(BaseModel):
-    ids: List[int]
+@app.get("/history")
+def get_history(page: int = 1, page_size: int = 20, keyword: str = "") -> dict:
+    """获取历史记录列表，支持分页和关键词搜索"""
+    return database.get_history_list(page, page_size, keyword)
+
 
 @app.post("/history/delete")
-def delete_history(req: DeleteRequest):
-    try:
-        if not req.ids:
-            return {"success": True, "count": 0}
-            
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        placeholders = ','.join('?' * len(req.ids))
-        c.execute(f"DELETE FROM history WHERE id IN ({placeholders})", req.ids)
-        count = c.rowcount
-        conn.commit()
-        conn.close()
-        return {"success": True, "count": count}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+def delete_history(req: schemas.DeleteRequest) -> dict:
+    """批量删除历史记录"""
+    return database.delete_history_items(req.ids)
+
 
 @app.post("/history/clear")
-def clear_history():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM history")
-        conn.commit()
-        conn.close()
-        return {"success": True}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+def clear_history() -> dict:
+    """清空所有历史记录"""
+    return database.clear_all_history()
 
-# [优化] 改为同步函数
+
 @app.post("/history/rename")
-def rename_history(body: dict):
+def rename_history(body: schemas.RenameRequest) -> JSONResponse:
     """重命名历史记录"""
     try:
-        url = body.get("url")
-        filename = body.get("filename")
-        
-        if not url or not filename:
-            return JSONResponse({"success": False, "error": "缺少必要参数"})
-        
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        
-        # 尝试直接匹配URL
-        c.execute("UPDATE history SET filename = ? WHERE url = ?", (filename, url))
-        affected = c.rowcount
-        
-        # 如果没有匹配到，尝试提取路径部分进行匹配
-        if affected == 0 and url.startswith("http"):
-            # 从完整URL中提取路径部分 (如 /mycloud/xxx.png)
-            from urllib.parse import urlparse
-            parsed = urlparse(url)
-            path = parsed.path
-            c.execute("UPDATE history SET filename = ? WHERE url = ?", (filename, path))
-            affected = c.rowcount
-        
-        conn.commit()
-        conn.close()
-        
-        if affected > 0:
-            logger.info(f"✅ 重命名成功: {url} -> {filename}")
+        res = database.rename_history_item(body.url, body.filename)
+
+        if res["success"]:
+            logger.info(f"✅ 重命名成功: {body.url} -> {body.filename}")
             return JSONResponse({"success": True})
         else:
-            logger.warning(f"❌ 重命名失败: 未找到匹配的记录 (URL: {url})")
-            return JSONResponse({"success": False, "error": "未找到匹配的记录"})
+            logger.warning(f"❌ 重命名失败: {res.get('error')} (URL: {body.url})")
+            return JSONResponse({"success": False, "error": res.get("error")})
     except Exception as e:
-        logger.error(f"❌ 重命名失败: {e}")
-        traceback.print_exc()
-        return JSONResponse({"success": False, "error": str(e)})
+        logger.error(f"❌ 重命名失败: {e}", exc_info=True)
+        return JSONResponse({"success": False, "error": "服务器内部错误"})
 
-# === 10. 静态文件与首页 ===
+
+# ==================== 健康检查 ====================
+
+@app.get("/health")
+def health_check() -> dict:
+    """健康检查端点，用于监控服务状态"""
+    return {"status": "healthy", "service": "image-url-tool"}
+
+
+# ==================== 静态文件与首页 ====================
+
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
+
 @app.get("/")
-def idx():
+def index() -> FileResponse:
+    """返回前端首页"""
     return FileResponse(os.path.join("frontend", "index.html"))
+
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=8000,
+        host=DEFAULT_HOST,
+        port=DEFAULT_PORT,
         log_level="info",
         access_log=False
     )
