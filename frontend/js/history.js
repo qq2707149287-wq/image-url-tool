@@ -5,6 +5,48 @@ window.historyPageSize = 10;
 window.historyTotal = 0;
 window.selectedIds = new Set(); // 使用 ID 进行多选，更准确
 
+// ============ 时间格式化工具 ============
+
+/**
+ * 将 UTC 时间字符串转换为用户本地时区的格式化时间
+ * @param {string} utcTimeStr - UTC 时间字符串，格式如 "2024-01-15 10:30:00" 或 "2024-01-15T10:30:00"
+ * @returns {string} 本地时区的格式化时间字符串
+ */
+function formatLocalTime(utcTimeStr) {
+    if (!utcTimeStr) return "";
+
+    try {
+        // SQLite CURRENT_TIMESTAMP 格式: "2024-01-15 10:30:00"
+        // 需要将其转换为 ISO 格式并标记为 UTC
+        var normalized = utcTimeStr.trim().replace(" ", "T");
+        // 如果没有时区标记，添加 Z 表示 UTC
+        if (!normalized.endsWith("Z") && !normalized.includes("+") && !normalized.includes("-", 10)) {
+            normalized += "Z";
+        }
+
+        var date = new Date(normalized);
+
+        // 检查日期是否有效
+        if (isNaN(date.getTime())) {
+            return utcTimeStr.replace("T", " ").split(".")[0];
+        }
+
+        // 使用用户本地时区格式化
+        // 格式: YYYY-MM-DD HH:mm:ss
+        var year = date.getFullYear();
+        var month = String(date.getMonth() + 1).padStart(2, "0");
+        var day = String(date.getDate()).padStart(2, "0");
+        var hours = String(date.getHours()).padStart(2, "0");
+        var minutes = String(date.getMinutes()).padStart(2, "0");
+        var seconds = String(date.getSeconds()).padStart(2, "0");
+
+        return year + "-" + month + "-" + day + " " + hours + ":" + minutes + ":" + seconds;
+    } catch (e) {
+        // 解析失败时返回原始字符串的简单处理
+        return utcTimeStr.replace("T", " ").split(".")[0];
+    }
+}
+
 // ============ 数据清洗工具 (生成说明文件用) ============
 function cleanDataForExport(dataList) {
     var result = [];
@@ -222,12 +264,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
         var meta = document.createElement("div");
         meta.className = "history-time";
-        // 格式化时间
-        var timeStr = item.created_at || "";
-        try {
-            // 简单处理时间显示
-            timeStr = timeStr.replace("T", " ").split(".")[0];
-        } catch (e) { }
+        // 格式化时间：将 UTC 时间转换为用户本地时区
+        var timeStr = formatLocalTime(item.created_at);
         meta.textContent = timeStr;
         infoDiv.appendChild(meta);
 
