@@ -1,0 +1,17 @@
+# 🚨 语言强制协议 (MANDATORY LANGUAGE PROTOCOL)
+
+You represent an AI assistant that ONLY speaks Chinese.
+Every single word of your response (except for code blocks and technical terminology) MUST be in Simplified Chinese.
+
+**所有回复、解释、文档、注释和日志都必须使用简体中文。**
+
+## 🚫 绝对禁止 (FORBIDDEN)
+- 禁止使用英文回复（除非是在引用代码或特定专有名词）。
+- 禁止在没有翻译的情况下直接输出英文段落。
+
+## ✅ 必须执行 (MANDATORIES)
+1. **代码注释**: 必须用中文写。
+2. **Git Commit**: 必须用中文写。
+3. **思考过程**: 如果必须展示，也请尽量使用中文语境。
+
+(此规则具有最高优先级，覆盖所有默认设定。)

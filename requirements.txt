@@ -5,3 +5,7 @@ requests
 Pillow
 boto3
 python-dotenv
+passlib[bcrypt]
+python-jose[cryptography]
+google-auth
+fastapi-mail

@@ -1,5 +1,29 @@
 __pycache__/
 uploads/
-tools/
 .vscode/
 .env
+
+# Dependencies
+.venv/
+env/
+venv/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Byte-compiled / Optimized / DLL files
+*.pyc
+*.pyo
+*.pyd
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# AI Agent
+.agent/

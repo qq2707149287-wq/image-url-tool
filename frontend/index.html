@@ -15,6 +15,8 @@
             <p class="subtitle">永久存储 · 批量处理</p>
             <div class="header-tools">
                 <button class="btn-ghost" id="themeToggle">🌙 深色模式</button>
+                <button class="btn-ghost" id="settingsBtn" title="系统设置">⚙️</button>
+                <button class="btn-ghost" id="authBtn">👤 登录/注册</button>
             </div>
         </div>
 
@@ -25,8 +27,19 @@
 
         <!-- 1. 批量上传页 -->
         <div id="content-upload" class="tab-content active">
+            <!-- 上传模式切换 -->
+            <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:10px;">
+                <div class="mode-toggle-group">
+                    <span>私有</span>
+                    <button type="button" id="uploadModeBtn" class="mode-toggle-btn active"></button>
+                    <span>共享</span>
+                </div>
+            </div>
+
             <div id="uploadArea" class="upload-area" tabindex="0">
                 <p>点击、拖拽或 Ctrl+V 粘贴图片到这里</p>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">支持 JPG/PNG/WebP 等格式，最大 10MB
+                </p>
             </div>
 
             <input type="file" id="fileInput" accept="image/*" multiple hidden>
@@ -56,8 +69,23 @@
         <!-- 2. 历史记录页 -->
         <div id="content-history" class="tab-content">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                <h3>历史记录</h3>
-                <div class="history-tools">
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <h3>历史记录</h3>
+                    <!-- 只看我的（仅在共享模式下显示） -->
+                    <label id="onlyMineFilter"
+                        style="display:none; align-items:center; gap:5px; font-size:13px; cursor:pointer; color:var(--text-secondary);">
+                        <input type="checkbox" id="onlyMineCheckbox"
+                            style="width:14px; height:14px; accent-color:var(--primary-color);">
+                        <span>只看我的</span>
+                    </label>
+                </div>
+                <div class="history-tools" style="display:flex; align-items:center; gap:15px;">
+                    <!-- 查看模式切换 -->
+                    <div class="mode-toggle-group">
+                        <span style="font-size:13px">私有</span>
+                        <button type="button" id="viewModeBtn" class="mode-toggle-btn active"></button>
+                        <span style="font-size:13px">共享</span>
+                    </div>
                     <button class="btn-ghost" id="clearHistoryBtn" style="color:var(--danger)">清空全部</button>
                 </div>
             </div>
@@ -130,12 +158,174 @@
         </div>
     </div>
 
+    <!-- 登录/注册模态框 -->
+    <div id="authModal" class="modal-backdrop">
+        <div class="modal-content" style="max-width: 350px;">
+            <div class="modal-header">
+                <span class="modal-title" id="authTitle">登录</span>
+                <button class="modal-close"
+                    onclick="document.getElementById('authModal').style.display='none'">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="authFormContainer" class="auth-form">
+                    <div class="form-group" style="margin-bottom: 15px;">
+                        <label style="display:block; margin-bottom: 5px; font-size: 14px;">用户名</label>
+                        <input type="text" id="authUsername" class="input-text" style="width: 100%; padding: 8px;">
+                    </div>
+
+                    <!-- 邮箱 (注册/重置) -->
+                    <div class="form-group" id="emailGroup" style="display:none; margin-bottom: 15px;">
+                        <label style="display:block; margin-bottom: 5px; font-size: 14px;">邮箱</label>
+                        <div style="display:flex;">
+                            <input type="email" id="authEmail" class="input-text" style="flex:1; padding: 8px;"
+                                placeholder="example@qq.com">
+                            <button id="sendCodeBtn" class="btn-secondary"
+                                style="margin-left:5px; white-space:nowrap;">发送验证码</button>
+                        </div>
+                    </div>
+                    <!-- 验证码 (注册/重置) -->
+                    <div class="form-group" id="codeGroup" style="display:none; margin-bottom: 15px;">
+                        <label style="display:block; margin-bottom: 5px; font-size: 14px;">验证码</label>
+                        <input type="text" id="authCode" class="input-text" style="width: 100%; padding: 8px;"
+                            placeholder="6位数字验证码">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <div style="display:flex; justify-content:space-between;">
+                            <label style="display:block; margin-bottom: 5px; font-size: 14px;">密码</label>
+                            <a href="javascript:void(0)" id="forgotPasswordLink"
+                                style="font-size:12px; color:#666; display:none;">忘记密码?</a>
+                        </div>
+                        <input type="password" id="authPassword" class="input-text" style="width: 100%; padding: 8px;"
+                            minlength="6">
+                        <small id="passwordHint" style="display:none; color: gray; font-size: 12px;">推荐：密码至少6个字符</small>
+                    </div>
+
+                    <!-- 记住我 (Login Only) -->
+                    <div class="form-group" id="rememberMeGroup"
+                        style="margin-bottom: 15px; display: flex; align-items: center;">
+                        <input type="checkbox" id="authRememberMe" checked style="width: auto; margin-right: 8px;">
+                        <label for="authRememberMe" style="font-size: 14px; cursor: pointer;">记住我 (30天免登录)</label>
+                    </div>
+                    <button class="btn-primary" id="authSubmitBtn" style="width: 100%;">登录</button>
+
+                    <div id="googleBtnContainer" style="margin-top: 15px; display: flex; justify-content: center;">
+                    </div>
+
+                    <div style="margin-top: 15px; text-align: center; font-size: 13px;">
+                        <span id="authToggleText">还没有账号？</span>
+                        <a href="javascript:void(0)" id="authToggleLink" style="color: var(--primary-color);">去注册</a>
+                    </div>
+                    <div id="authMessage" style="color: red; margin-top: 10px; font-size: 13px; text-align: center;">
+                    </div>
+                </div>
+
+                <!-- 登录后显示的信息 -->
+                <div id="authUserInfoContainer" class="auth-user-info" style="display: none; text-align: center;">
+                    <p style="font-size: 18px; margin-bottom: 10px;">欢迎, <strong id="currentUserDisplay">User</strong>
+                    </p>
+                    <p id="userEmailDisplay" style="color: var(--text-secondary); font-size: 13px; margin-bottom: 5px;">
+                    </p>
+                    <p id="userStatsDisplay"
+                        style="color: var(--text-secondary); font-size: 12px; margin-bottom: 15px;"></p>
+
+                    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+                        <button class="btn-secondary" id="changeUsernameBtn" style="width: 100%;">修改用户名</button>
+                        <button class="btn-secondary" id="changePasswordBtn" style="width: 100%;">修改密码</button>
+                        <button class="btn-secondary" id="viewSessionsBtn" style="width: 100%;">设备管理</button>
+                        <button class="btn-primary" id="activateVipBtn"
+                            style="width: 100%; background: linear-gradient(45deg, #FFD700, #FFA500); border: none; color: #fff;">💎
+                            激活 VIP</button>
+                        <button class="btn-danger" id="logoutBtn" style="width: 100%;">退出登录</button>
+                        <a href="javascript:void(0)" id="deleteAccountLink"
+                            style="font-size: 12px; color: #999; margin-top: 10px;">注销账号</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设备管理模态框 -->
+    <div id="sessionsModal" class="modal-backdrop" style="display: none; z-index: 2000;">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <span class="modal-title">设备管理</span>
+                <button class="modal-close"
+                    onclick="document.getElementById('sessionsModal').style.display='none'">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 10px; font-size: 13px; color: #666;">
+                    管理您当前登录的设备。移除设备将使其立即下线。
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #eee; text-align: left;">
+                            <th style="padding: 8px;">设备</th>
+                            <th style="padding: 8px;">IP 地址</th>
+                            <th style="padding: 8px;">最后活跃</th>
+                            <th style="padding: 8px; text-align: right;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sessionsTableBody">
+                        <!-- Sessions here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div id="settingsModal" class="modal-backdrop" style="display: none; z-index: 2002;">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <span class="modal-title">系统设置</span>
+                <button class="modal-close" id="settingsModalCloseBtn">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group"
+                    style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                    <div>
+                        <span style="font-weight: bold; display: block;">调试模式</span>
+                        <small style="color: #666;">开启后注册无需验证邮箱</small>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="debugModeToggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通用输入模态框 (Change Username/Password/Confirm) -->
+    <div id="inputModal" class="modal-backdrop" style="display: none; z-index: 2001;">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <span class="modal-title" id="inputModalTitle">标题</span>
+                <button class="modal-close" id="inputModalCloseBtn">×</button>
+            </div>
+            <div class="modal-body">
+                <p id="inputModalMessage" style="margin-bottom: 10px; color: #666;"></p>
+                <div id="inputContainer">
+                    <!-- Dynamic inputs will be inserted here -->
+                </div>
+                <div style="margin-top: 15px; text-align: right;">
+                    <button class="btn-secondary" id="inputModalCancelBtn" style="margin-right: 10px;">取消</button>
+                    <button class="btn-primary" id="inputModalSubmitBtn">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="/static/js/ui.js?v=1.1" defer></script>
-    <script src="/static/js/core.js?v=1.1" defer></script>
-    <script src="/static/js/upload.js?v=1.1" defer></script>
-    <script src="/static/js/history.js?v=1.1" defer></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="/static/js/ui.js?v=1.5" defer></script>
+    <script src="/static/js/core.js?v=1.5" defer></script>
+    <script src="/static/js/upload.js?v=1.5" defer></script>
+    <script src="/static/js/history.js?v=1.5" defer></script>
+    <script src="/static/js/auth.js?v=1.5" defer></script>
 </body>
 
 </html>

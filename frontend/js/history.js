@@ -5,6 +5,17 @@ window.historyPageSize = 10;
 window.historyTotal = 0;
 window.selectedIds = new Set(); // 使用 ID 进行多选，更准确
 
+// ============ 查看模式状态 ============
+// viewMode: "private"(私有图片) 或 "shared"(共享图片)
+// 如果未登录，强制默认为 "shared"
+var initialViewMode = localStorage.getItem("viewMode") || "private";
+if (!localStorage.getItem("token")) {
+    initialViewMode = "shared";
+}
+window.viewMode = initialViewMode;
+// onlyMine: 在共享模式下是否只看自己的共享图片
+window.onlyMine = localStorage.getItem("onlyMine") === "true";
+
 // ============ 时间格式化工具 ============
 
 /**
@@ -115,13 +126,85 @@ document.addEventListener("DOMContentLoaded", function () {
     var copyDescBtn = document.getElementById("copyDescBtn");
     var downloadDescBtn = document.getElementById("downloadDescBtn");
 
+    // 查看模式切换相关
+    var viewModeBtn = document.getElementById("viewModeBtn");
+    var onlyMineFilter = document.getElementById("onlyMineFilter");
+    var onlyMineCheckbox = document.getElementById("onlyMineCheckbox");
+
+    // 初始化查看模式UI
+    function updateViewModeUI() {
+        var isSharedView = window.viewMode === "shared";
+
+        if (viewModeBtn) {
+            if (isSharedView) {
+                viewModeBtn.classList.add('active');
+            } else {
+                viewModeBtn.classList.remove('active');
+            }
+        }
+        // 只在共享模式下显示"只看我的"筛选
+        if (onlyMineFilter) {
+            onlyMineFilter.style.display = isSharedView ? "flex" : "none";
+        }
+        if (onlyMineCheckbox) {
+            onlyMineCheckbox.checked = window.onlyMine;
+        }
+    }
+
+    // 切换查看模式
+    if (viewModeBtn) {
+        // 初始化状态
+        updateViewModeUI();
+
+        viewModeBtn.onclick = function () {
+            // 检查登录状态 (简单判断 token)
+            var token = localStorage.getItem("token");
+            if (!token) {
+                if (window.showToast) window.showToast("匿名用户仅支持查看共享模式", "warning");
+                // 强制保持 shared
+                window.viewMode = "shared";
+                updateViewModeUI();
+                return;
+            }
+
+            window.viewMode = window.viewMode === "shared" ? "private" : "shared";
+            localStorage.setItem("viewMode", window.viewMode);
+            updateViewModeUI();
+
+            var msg = window.viewMode === "shared"
+                ? "正在查看共享图片"
+                : "正在查看私有图片";
+            if (window.showToast) window.showToast(msg, "info");
+
+            // 重新加载历史记录
+            window.historyPage = 1;
+            loadHistory();
+        };
+    }
+
+    // "只看我的"筛选
+    if (onlyMineCheckbox) {
+        onlyMineCheckbox.onchange = function () {
+            window.onlyMine = this.checked;
+            localStorage.setItem("onlyMine", window.onlyMine ? "true" : "false");
+
+            // 重新加载历史记录
+            window.historyPage = 1;
+            loadHistory();
+        };
+    }
+
     // ============ 工具函数 ============
     // 重命名历史记录（通过URL）
     window.renameHistoryByUrl = function (url, newName) {
         // 发送请求到后端更新数据库中的filename
+        var headers = { "Content-Type": "application/json" };
+        var token = localStorage.getItem("token");
+        if (token) headers["Authorization"] = "Bearer " + token;
+
         fetch("/history/rename", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: headers,
             body: JSON.stringify({ url: url, filename: newName })
         })
             .then(function (res) { return res.json(); })
@@ -146,8 +229,18 @@ document.addEventListener("DOMContentLoaded", function () {
         if (keyword) {
             url += "&keyword=" + encodeURIComponent(keyword);
         }
+        // 添加查看模式参数
+        url += "&view_mode=" + encodeURIComponent(window.viewMode);
+        // 在共享模式下，添加"只看我的"参数
+        if (window.viewMode === "shared" && window.onlyMine) {
+            url += "&only_mine=true";
+        }
 
-        fetch(url)
+        var headers = {};
+        var token = localStorage.getItem("token");
+        if (token) headers["Authorization"] = "Bearer " + token;
+
+        fetch(url, { headers: headers })
             .then(function (res) { return res.json(); })
             .then(function (res) {
                 if (res.success) {
@@ -181,7 +274,9 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         if (paginationBar) paginationBar.style.display = 'flex';
-        if (selectAllBox) selectAllBox.disabled = false;
+        // 匿名用户禁止删除/操作 (除非有 token)
+        var token = localStorage.getItem("token");
+        if (selectAllBox) selectAllBox.disabled = !token;
 
         // 检查全选状态
         updateSelectAllState(list);
@@ -208,6 +303,7 @@ document.addEventListener("DOMContentLoaded", function () {
             card.classList.add("selected");
         }
 
+        // 复选框区域
         // 复选框区域
         var checkOverlay = document.createElement("div");
         checkOverlay.className = "checkbox-overlay";
@@ -299,15 +395,24 @@ document.addEventListener("DOMContentLoaded", function () {
         var btnRename = document.createElement("button");
         btnRename.className = "btn-mini";
         btnRename.textContent = "重命名";
-        btnRename.onclick = function (e) {
-            e.stopPropagation();
-            var newName = prompt("请输入新名称:", item.filename);
-            if (newName && newName.trim() !== "" && newName !== item.filename) {
-                if (window.renameHistoryByUrl) {
-                    window.renameHistoryByUrl(fullUrl, newName.trim());
+
+        // 只有自己的记录才能重命名
+        if (item.is_mine === false) {
+            btnRename.disabled = true;
+            btnRename.style.opacity = "0.5";
+            btnRename.style.cursor = "not-allowed";
+            btnRename.title = "无法重命名他人的共享记录";
+        } else {
+            btnRename.onclick = function (e) {
+                e.stopPropagation();
+                var newName = prompt("请输入新名称:", item.filename);
+                if (newName && newName.trim() !== "" && newName !== item.filename) {
+                    if (window.renameHistoryItem) {
+                        window.renameHistoryItem(item.id, newName.trim());
+                    }
                 }
-            }
-        };
+            };
+        }
 
         actions.appendChild(btnRename);
         actions.appendChild(btnCopy);
@@ -370,9 +475,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
             var ids = Array.from(window.selectedIds);
 
+            var ids = Array.from(window.selectedIds);
+
+            var headers = { "Content-Type": "application/json" };
+            var token = localStorage.getItem("token");
+            if (token) headers["Authorization"] = "Bearer " + token;
+
             fetch("/history/delete", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: headers,
                 body: JSON.stringify({ ids: ids })
             })
                 .then(function (res) { return res.json(); })
@@ -460,20 +571,29 @@ document.addEventListener("DOMContentLoaded", function () {
     // ============ 清空全部 (API) ============
     if (clearBtn) {
         clearBtn.onclick = function () {
-            if (window.confirm("确定清空所有历史记录？此操作不可恢复！")) {
-                fetch("/history/clear", { method: "POST" })
+            var modeName = window.viewMode === "shared" ? "共享" : "私有";
+            if (window.confirm("确定清空所有【" + modeName + "】历史记录？此操作不可恢复！")) {
+                var headers = {};
+                var token = localStorage.getItem("token");
+                if (token) headers["Authorization"] = "Bearer " + token;
+
+                // 添加 view_mode 参数
+                fetch("/history/clear?view_mode=" + encodeURIComponent(window.viewMode), {
+                    method: "POST",
+                    headers: headers
+                })
                     .then(function (res) { return res.json(); })
                     .then(function (res) {
                         if (res.success) {
                             window.selectedIds.clear();
                             loadHistory();
-                            if (window.showToast) window.showToast("历史记录已清空", "success");
+                            if (window.showToast) window.showToast(modeName + "历史记录已清空", "success");
                         } else {
                             alert("清空失败: " + res.error);
                         }
                     });
             }
-        };
+        }
     }
 
     // ============ 搜索 ============
@@ -525,5 +645,33 @@ document.addEventListener("DOMContentLoaded", function () {
             loadHistory();
         });
     }
+    // ============ 重命名 (API) ============
+    window.renameHistoryItem = function (id, newName) {
+        if (!id) return;
+        if (!newName || newName.trim() === "") return;
+
+        var headers = { "Content-Type": "application/json" };
+        var token = localStorage.getItem("token");
+        if (token) headers["Authorization"] = "Bearer " + token;
+
+        fetch("/history/rename", {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify({ id: id, filename: newName })
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (res) {
+                if (res.success) {
+                    if (window.showToast) window.showToast("重命名成功", "success");
+                    loadHistory();
+                } else {
+                    alert("重命名失败: " + res.error);
+                }
+            })
+            .catch(function (e) {
+                console.error(e);
+                alert("网络错误");
+            });
+    };
 });
 

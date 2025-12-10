@@ -6,6 +6,10 @@ window.uploadPageSize = 10;
 window.lastUploadResultUrl = null;
 window.uploadSelectedHashes = new Set(); // 存储上传列表中被选中的项目 (用 hash 做 key)
 
+// ============ 上传模式状态 ============
+// 从 localStorage 读取上传模式（false=私有，true=共享）
+window.uploadSharedMode = localStorage.getItem("uploadSharedMode") === "true";
+
 // 工具: 补全URL
 function getFullUrl(url) {
     if (!url) return "";
@@ -56,6 +60,37 @@ document.addEventListener('DOMContentLoaded', function () {
     var fileInput = document.getElementById('fileInput');
     var uploadNameInput = document.getElementById('uploadFilenameInput');
 
+    // ============ 上传模式切换 ============
+    var uploadModeBtn = document.getElementById('uploadModeBtn');
+
+    function updateUploadModeUI() {
+        if (uploadModeBtn) {
+            if (window.uploadSharedMode) {
+                uploadModeBtn.classList.add('active');
+            } else {
+                uploadModeBtn.classList.remove('active');
+            }
+        }
+    }
+
+    if (uploadModeBtn) {
+        updateUploadModeUI();
+
+        uploadModeBtn.addEventListener('click', function () {
+            var token = localStorage.getItem("token");
+
+            // 如果未登录且尝试切换到私有模式，显示提示
+            if (!token && window.uploadSharedMode) {
+                // 当前是共享模式，用户想切换到私有，但未登录
+                if (window.showToast) window.showToast("登录后可使用私有模式", "info");
+                return; // 不切换
+            }
+
+            window.uploadSharedMode = !window.uploadSharedMode;
+            localStorage.setItem("uploadSharedMode", window.uploadSharedMode ? "true" : "false");
+            updateUploadModeUI();
+        });
+    }
 
     // 多选相关 DOM
     var toolbar = document.getElementById('uploadMultiToolbar');
@@ -245,8 +280,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 // 如果需要同步到后端历史记录，这里可能需要额外接口，但目前 upload.js 主要是前端展示
                 // 且 history.js 负责历史记录。
                 // 如果用户希望重命名能持久化，我们需要调用 history.js 的 renameHistoryByUrl
-                if (window.renameHistoryByUrl) {
-                    window.renameHistoryByUrl(getFullUrl(data.url), newName);
+                if (window.renameHistoryItem && data.id) {
+                    window.renameHistoryItem(data.id, newName);
+                } else if (!data.id) {
+                    console.warn("Missing ID for sync rename");
                 }
                 if (window.showToast) window.showToast("重命名成功", "success");
             }
@@ -347,48 +384,107 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
             var formData = new FormData();
             formData.append('file', file);
-            // formData.append('services', 'myminio'); // 后端已优化，不再需要此参数
+            // 添加上传模式参数（私有/共享）
+            formData.append('shared_mode', window.uploadSharedMode ? 'true' : 'false');
+            // 添加认证 Token
+            var authToken = localStorage.getItem('token');
+            if (authToken) {
+                formData.append('token', authToken);
+            }
 
-            bar.style.width = '50%';
-            var resp = await fetch('/upload', { method: 'POST', body: formData });
-            var res = await resp.json();
-            bar.style.width = '100%';
+            bar.style.width = '0%';
 
-            setTimeout(function () {
-                if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
+            // 使用 XMLHttpRequest 实现真实进度条
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload', true);
 
-                if (res.success) {
-                    res.url = getFullUrl(res.url);
-                    // 去重
-                    var oldIdx = -1;
-                    for (var k = 0; k < window.allUploadResults.length; k++) {
-                        if (window.allUploadResults[k].hash === res.hash) {
-                            oldIdx = k;
-                            break;
-                        }
+            // 进度事件
+            if (xhr.upload) {
+                xhr.upload.onprogress = function (e) {
+                    if (e.lengthComputable) {
+                        var percentComplete = (e.loaded / e.total) * 100;
+                        bar.style.width = percentComplete + '%';
                     }
-                    if (oldIdx !== -1) window.allUploadResults.splice(oldIdx, 1);
+                };
+            }
 
-                    res.filename = getDefaultNameFromResult(res);
-
-                    window.allUploadResults.unshift(res);
-                    window.lastUploadResultUrl = res.url;
-
-
-                    // 刷新历史记录 (如果已加载)
-                    if (typeof window.displayHistory === 'function') window.displayHistory();
+            // 完成处理
+            xhr.onload = function () {
+                if (xhr.status == 200) {
+                    var res;
+                    try {
+                        res = JSON.parse(xhr.responseText);
+                        handleUploadSuccess(res);
+                    } catch (e) {
+                        handleUploadError(file.name, "Invalid Server Response");
+                    }
                 } else {
-                    // 错误卡片 - 添加到列表数据中，而不是直接操作DOM
-                    window.allUploadResults.unshift({
-                        isError: true,
-                        filename: file.name,
-                        error: res.error || '未知错误',
-                        hash: 'error_' + Date.now() + Math.random() // 唯一ID防止冲突
-                    });
+                    // 尝试解析服务器返回的错误详情
+                    var errorMsg = "服务器错误: " + xhr.status;
+                    try {
+                        var errRes = JSON.parse(xhr.responseText);
+                        if (errRes.detail) {
+                            errorMsg = errRes.detail;
+                        } else if (errRes.error) {
+                            errorMsg = errRes.error;
+                        }
+                    } catch (e) {
+                        // 解析失败，使用默认错误信息
+                    }
+                    handleUploadError(file.name, errorMsg);
                 }
+            };
 
-                window.renderUploadList();
-            }, 400);
+            xhr.onerror = function () {
+                handleUploadError(file.name, "Network Error");
+            };
+
+            xhr.send(formData);
+
+            function handleUploadSuccess(res) {
+                bar.style.width = '100%';
+
+                setTimeout(function () {
+                    if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
+
+                    if (res.success) {
+                        res.url = getFullUrl(res.url);
+                        // 去重
+                        var oldIdx = -1;
+                        for (var k = 0; k < window.allUploadResults.length; k++) {
+                            if (window.allUploadResults[k].hash === res.hash) {
+                                oldIdx = k;
+                                break;
+                            }
+                        }
+                        if (oldIdx !== -1) window.allUploadResults.splice(oldIdx, 1);
+
+                        res.filename = getDefaultNameFromResult(res);
+
+                        window.allUploadResults.unshift(res);
+                        window.lastUploadResultUrl = res.url;
+
+
+                        // 刷新历史记录 (如果已加载)
+                        if (typeof window.displayHistory === 'function') window.displayHistory();
+                    } else {
+                        // 错误卡片 - 添加到列表数据中，而不是直接操作DOM
+                        window.allUploadResults.unshift({
+                            isError: true,
+                            filename: file.name,
+                            error: res.error || '未知错误',
+                            hash: 'error_' + Date.now() + Math.random() // 唯一ID防止冲突
+                        });
+                    }
+
+                    window.renderUploadList();
+                }, 400);
+            }
+
+            function handleUploadError(filename, errorMsg) {
+                if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
+                if (window.showToast) window.showToast("上传异常: " + errorMsg, "error");
+            }
 
         } catch (e) {
             console.error(e);

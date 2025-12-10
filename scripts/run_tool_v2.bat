@@ -30,6 +30,6 @@ echo    Please keep this window open.
 echo.
 
 start http://localhost:8000
-python main.py
+python run.py
 
 pause
