@@ -18,6 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua
 # 4. 复制剩余代码
 COPY . .
 
+# 5. 持久化配置
+ENV DATA_DIR=/app/data
+# 声明 /app/data 为挂载点，提示 Docker/Coolify 这里需要持久化
+VOLUME ["/app/data"]
+
 # 暴露端口
 EXPOSE 8000
 

@@ -8,8 +8,16 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-# 数据库文件路径：放在当前文件同级目录下，名叫 history.db
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history.db")
+# 数据库文件路径配置
+# 1. 优先使用环境变量 DATA_DIR 指定的目录 (用于 Docker 挂载卷: /app/data)
+# 2. 否则默认为当前文件同级目录 (用于本地开发)
+DATA_DIR = os.getenv("DATA_DIR")
+if DATA_DIR:
+    # 确保目录存在
+    os.makedirs(DATA_DIR, exist_ok=True)
+    DB_PATH = os.path.join(DATA_DIR, "history.db")
+else:
+    DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history.db")
 
 
 @contextmanager
