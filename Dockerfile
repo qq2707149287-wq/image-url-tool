@@ -4,9 +4,10 @@ FROM python:3.10-slim
 # 设置工作目录
 WORKDIR /app
 
-# 1. 安装 curl (用于健康检查)
-# 这一步必须在 COPY 之前，利用 Docker 缓存
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# 1. 更换为清华源并安装 curl
+# (python:3.10-slim 基于 Debian，默认源在国内很慢，换成清华源加速)
+RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list && \
+  apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # 2. 先只复制 requirements.txt
 COPY requirements.txt .
