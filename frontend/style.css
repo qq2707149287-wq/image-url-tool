@@ -538,3 +538,44 @@ body {
 .toggle-switch input:checked+.toggle-slider:before {
     transform: translateX(20px);
 }
+
+/* 底部页脚样式 */
+.site-footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.footer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+}
+
+.footer-links {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.footer-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.footer-links a:hover {
+    color: var(--primary-color);
+}
+
+.divider {
+    color: var(--border-color);
+}
+
+.copyright {
+    opacity: 0.8;
+}

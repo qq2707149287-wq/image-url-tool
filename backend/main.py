@@ -1126,6 +1126,22 @@ def health_check() -> dict:
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 
+@app.get("/terms")
+def terms() -> FileResponse:
+    """服务条款页面"""
+    return FileResponse(os.path.join("frontend", "pages", "terms.html"))
+
+@app.get("/privacy")
+def privacy() -> FileResponse:
+    """隐私政策页面"""
+    return FileResponse(os.path.join("frontend", "pages", "privacy.html"))
+
+@app.get("/report")
+def report() -> FileResponse:
+    """举报页面"""
+    return FileResponse(os.path.join("frontend", "pages", "report.html"))
+
+
 @app.get("/")
 def index() -> FileResponse:
     """
