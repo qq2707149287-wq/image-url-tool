@@ -33,6 +33,11 @@ COPY . .
 
 # 5. 持久化配置
 ENV DATA_DIR=/app/data
+# [优化] 将 HOME 设置为 /app/data，这样 ~/.cache (HuggingFace) 和 ~/.NudeNet 都会存到持久化目录
+ENV HOME=/app/data
+ENV HF_HOME=/app/data/.cache/huggingface
+ENV TORCH_HOME=/app/data/.cache/torch
+
 # 声明 /app/data 为挂载点，提示 Docker/Coolify 这里需要持久化
 VOLUME ["/app/data"]
 
