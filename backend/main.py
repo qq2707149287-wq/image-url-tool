@@ -165,11 +165,15 @@ app.add_middleware(
 )
 
 # [SECURITY] 解决 Google Login "Cross-Origin-Opener-Policy" 报错
-# Google OAuth 弹窗需要向父窗口发送消息，必须设置为 same-origin-allow-popups
+# 1. Cross-Origin-Opener-Policy: unsafe-none (允许与 Google 弹窗通信，禁用隔离)
+# 2. Referrer-Policy: no-referrer-when-downgrade (这是 Google OAuth 推荐的设置)
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
-    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    # 强制允许跨域弹窗通信
+    response.headers["Cross-Origin-Opener-Policy"] = "unsafe-none" 
+    response.headers["Referrer-Policy"] = "no-referrer-when-downgrade"
+    # 可选: 如果需要更严格的安全，可以尝试 "same-origin-allow-popups"，但 "unsafe-none" 兼容性最好
     return response
 
 # ==================== 系统设置 ====================
