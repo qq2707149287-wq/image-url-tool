@@ -45,10 +45,10 @@ VOLUME ["/app/data"]
 EXPOSE 8000
 
 # 5. 优化后的健康检查
-# - start-period: 给它 10秒 启动时间，不要一上来就报错
+# - start-period: 给它 60秒 启动时间 (PyTorch/Transformers 导入很慢)
 # - interval: 每 30秒 查一次，减轻压力
 # - CMD: 使用 curl -f 检查 /health 接口
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
 # 启动命令
