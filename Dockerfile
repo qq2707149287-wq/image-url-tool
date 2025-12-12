@@ -9,10 +9,15 @@ WORKDIR /app
 RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list && \
   apt-get update && apt-get install -y curl libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
 
-# 2. 先只复制 requirements.txt
+# 2. [优化] 优先单独安装 PyTorch CPU 版 (利用 Docker 层缓存)
+# 这一步非常重要！避免每次修改代码都重新下载 2GB 的 PyTorch
+RUN pip install --no-cache-dir "torch==2.9.1" --index-url https://download.pytorch.org/whl/cpu
+
+# 3. 复制 requirements.txt
 COPY requirements.txt .
 
-# 3. 安装依赖 (使用清华源加速)
+# 4. 安装剩余依赖 (使用清华源加速)
+# 注意: torch 已经在上一步安装，这里会显示 "checking..." 然后跳过
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 4. 复制剩余代码
