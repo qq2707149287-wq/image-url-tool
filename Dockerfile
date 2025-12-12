@@ -14,9 +14,12 @@ RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.li
 # 添加 --extra-index-url 以便能从清华源下载 torch 的依赖库 (如 typing-extensions)
 RUN pip install --no-cache-dir "torch==2.9.1" --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 2.5. [优化] 单独安装大体积依赖 (Transformers, NudeNet)
-# 这样即使 requirements.txt 里的其他小依赖变了，这些大包也不用重新下载
-RUN pip install --no-cache-dir "transformers==4.57.3" "nudenet==3.4.2" -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 2.5. [优化] 分步安装大体积依赖 (降低构建时的内存峰值)
+# 先安装 Transformers
+RUN pip install --no-cache-dir "transformers==4.57.3" -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 再安装 NudeNet
+RUN pip install --no-cache-dir "nudenet==3.4.2" -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 3. 复制 requirements.txt
 COPY requirements.txt .
