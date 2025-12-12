@@ -164,6 +164,14 @@ app.add_middleware(
     allow_headers=["*"],  # 允许所有头
 )
 
+# [SECURITY] 解决 Google Login "Cross-Origin-Opener-Policy" 报错
+# Google OAuth 弹窗需要向父窗口发送消息，必须设置为 same-origin-allow-popups
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    return response
+
 # ==================== 系统设置 ====================
 
 @app.get("/system/settings")
