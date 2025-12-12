@@ -12,10 +12,14 @@ logger = logging.getLogger(__name__)
 _s3_client: Optional[Any] = None
 MINIO_BUCKET_NAME = "images"  # 默认值，会从环境变量更新
 
+# [兼容] 暴露 minio_client 别名，供 main.py 健康检查使用
+# 注意: 这是懒加载的，需要先调用 get_s3_client() 初始化
+minio_client = None  # 将在 get_s3_client() 中更新
+
 
 def get_s3_client() -> Optional[Any]:
     """获取 S3 客户端实例（延迟初始化）"""
-    global _s3_client, MINIO_BUCKET_NAME
+    global _s3_client, MINIO_BUCKET_NAME, minio_client
     if _s3_client is None:
         # 延迟读取环境变量，确保 load_dotenv() 已执行
         minio_endpoint = os.getenv("MINIO_ENDPOINT")
@@ -34,6 +38,8 @@ def get_s3_client() -> Optional[Any]:
             aws_secret_access_key=minio_secret_key,
             config=Config(signature_version="s3v4")
         )
+        # [兼容] 同步更新全局别名
+        minio_client = _s3_client
     return _s3_client
 
 def upload_to_minio(data: bytes, name: str, fhash: str) -> dict[str, Any]:
