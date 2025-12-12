@@ -1,3 +1,27 @@
+// [Fix] Google Sign-In 回调函数 (必须定义在全局作用域)
+// 在 redirect 模式下，这个函数通常不会被调用（Google 直接 POST 到后端）
+// 但 Google SDK 仍然需要它存在，否则会报错
+function handleGoogleCredentialResponse(response) {
+    // 这个函数在 redirect 模式下不会被调用
+    // 如果意外被调用，尝试手动 POST 到后端
+    console.log("[Google Login] Callback invoked (unexpected in redirect mode)");
+    if (response && response.credential) {
+        // 创建一个隐藏表单并提交到后端
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/auth/google-callback';
+
+        var credInput = document.createElement('input');
+        credInput.type = 'hidden';
+        credInput.name = 'credential';
+        credInput.value = response.credential;
+        form.appendChild(credInput);
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
 document.addEventListener("DOMContentLoaded", function () {
     // DOM Elements
     var authBtn = document.getElementById("authBtn");
