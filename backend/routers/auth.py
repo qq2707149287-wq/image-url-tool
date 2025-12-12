@@ -208,6 +208,67 @@ async def google_login(req_obj: Request, request: schemas.GoogleLoginRequest):
         logger.error(f"Google Login Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# [New] Google Redirect 模式的回调处理
+# 当 ux_mode: 'redirect' 时，Google 会 POST credential 到这个 URL
+from fastapi.responses import HTMLResponse
+from fastapi import Form
+
+@router.post("/google-callback", response_class=HTMLResponse)
+async def google_callback(req_obj: Request, credential: str = Form(...)):
+    """处理 Google Sign-In redirect 模式的回调"""
+    try:
+        id_info = id_token.verify_oauth2_token(
+            credential, 
+            google_requests.Request(), 
+            GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID != "YOUR_GOOGLE_CLIENT_ID" else None,
+            clock_skew_in_seconds=10
+        )
+        google_id = id_info['sub']
+        email = id_info.get('email')
+        name = id_info.get('name', 'Google User')
+        picture = id_info.get('picture')
+
+        user = database.get_user_by_google_id(google_id)
+        if not user:
+            username = email if email else f"google_{google_id[:8]}"
+            if database.get_user_by_username(username):
+                username = f"{username}_{uuid.uuid4().hex[:4]}"
+            
+            if not database.create_google_user(username, google_id, picture):
+               raise HTTPException(status_code=500, detail="Failed to create user")
+            user = database.get_user_by_username(username)
+
+        sid = database.create_session(user['id'], req_obj.headers.get("user-agent"), req_obj.client.host)
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user["username"], "sid": sid}, 
+            expires_delta=access_token_expires
+        )
+        
+        database.log_user_activity(user['id'], "LOGIN_GOOGLE", req_obj.client.host, req_obj.headers.get("user-agent"))
+
+        # 返回一个自动跳转的 HTML 页面，将 Token 存入 localStorage
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head><title>登录成功</title></head>
+        <body>
+            <p>登录成功，正在跳转...</p>
+            <script>
+                localStorage.setItem('token', '{access_token}');
+                localStorage.setItem('username', '{user["username"]}');
+                window.location.href = '/';
+            </script>
+        </body>
+        </html>
+        """
+    except ValueError as e:
+        logger.error(f"Invalid Google Token (redirect): {e}")
+        return f"<html><body><p>登录失败: Google Token 无效</p><a href='/'>返回首页</a></body></html>"
+    except Exception as e:
+        logger.error(f"Google Login Error (redirect): {e}")
+        return f"<html><body><p>登录失败: {str(e)}</p><a href='/'>返回首页</a></body></html>"
+
 @router.post("/send-code")
 async def send_verification_code(request: schemas.SendCodeRequest):
     email = request.email

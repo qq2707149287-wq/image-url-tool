@@ -219,7 +219,11 @@ document.addEventListener("DOMContentLoaded", function () {
                             if (config.google_client_id) {
                                 google.accounts.id.initialize({
                                     client_id: config.google_client_id,
-                                    callback: handleGoogleCredentialResponse
+                                    callback: handleGoogleCredentialResponse,
+                                    // [Fix] 使用 redirect 模式，避免 COOP 弹窗问题
+                                    // redirect 模式不依赖 postMessage，完全绕过跨域隔离问题
+                                    ux_mode: "redirect",
+                                    login_uri: window.location.origin + "/auth/google-callback"
                                 });
                                 google.accounts.id.renderButton(
                                     googleBtn,
