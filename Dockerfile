@@ -11,7 +11,8 @@ RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.li
 
 # 2. [优化] 优先单独安装 PyTorch CPU 版 (利用 Docker 层缓存)
 # 这一步非常重要！避免每次修改代码都重新下载 2GB 的 PyTorch
-RUN pip install --no-cache-dir "torch==2.9.1" --index-url https://download.pytorch.org/whl/cpu
+# 添加 --extra-index-url 以便能从清华源下载 torch 的依赖库 (如 typing-extensions)
+RUN pip install --no-cache-dir "torch==2.9.1" --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 3. 复制 requirements.txt
 COPY requirements.txt .
