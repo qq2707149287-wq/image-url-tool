@@ -214,8 +214,9 @@ from fastapi.responses import HTMLResponse
 from fastapi import Form
 
 @router.post("/google-callback", response_class=HTMLResponse)
-async def google_callback(req_obj: Request, credential: str = Form(...)):
+async def google_callback(req_obj: Request, credential: str = Form(...), g_csrf_token: str = Form(None)):
     """处理 Google Sign-In redirect 模式的回调"""
+    # 注意: g_csrf_token 是 Google 自动发送的，我们需要接收它但不需要验证（验证由 credential 本身完成）
     try:
         id_info = id_token.verify_oauth2_token(
             credential, 
