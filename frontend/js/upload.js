@@ -387,16 +387,17 @@ document.addEventListener('DOMContentLoaded', function () {
             // 添加上传模式参数（私有/共享）
             formData.append('shared_mode', window.uploadSharedMode ? 'true' : 'false');
             // 添加认证 Token
-            var authToken = localStorage.getItem('token');
-            if (authToken) {
-                formData.append('token', authToken);
-            }
-
             bar.style.width = '0%';
 
             // 使用 XMLHttpRequest 实现真实进度条
             var xhr = new XMLHttpRequest();
             xhr.open('POST', '/upload', true);
+
+            // [FIX] 添加 Authorization Header (Bearer Token)
+            var authToken = localStorage.getItem('token');
+            if (authToken) {
+                xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
+            }
 
             // 进度事件
             if (xhr.upload) {
@@ -414,6 +415,19 @@ document.addEventListener('DOMContentLoaded', function () {
                     var res;
                     try {
                         res = JSON.parse(xhr.responseText);
+
+                        // [NEW] 打印服务端返回的 AI 审计日志
+                        if (res.audit_logs) {
+                            console.group("%c🤖 AI Content Audit Debug", "color: #00ff00; font-weight: bold; background: #222; padding: 2px 5px; border-radius: 3px;");
+                            console.log("File:", file.name);
+                            if (res.audit_logs.clip) {
+                                console.table(res.audit_logs.clip);
+                            } else {
+                                console.log("Details:", res.audit_logs);
+                            }
+                            console.groupEnd();
+                        }
+
                         handleUploadSuccess(res);
                     } catch (e) {
                         handleUploadError(file.name, "Invalid Server Response");
@@ -423,6 +437,20 @@ document.addEventListener('DOMContentLoaded', function () {
                     var errorMsg = "服务器错误: " + xhr.status;
                     try {
                         var errRes = JSON.parse(xhr.responseText);
+
+                        // [NEW] 即使出错也打印审计日志
+                        if (errRes.audit_logs) {
+                            console.group("%c🚫 AI Audit Blocked", "color: red; font-weight: bold; background: #222; padding: 2px 5px; border-radius: 3px;");
+                            console.log("File:", file.name);
+                            console.log("Reason:", errRes.detail);
+                            if (errRes.audit_logs.clip) {
+                                console.table(errRes.audit_logs.clip);
+                            } else {
+                                console.log("Details:", errRes.audit_logs);
+                            }
+                            console.groupEnd();
+                        }
+
                         if (errRes.detail) {
                             errorMsg = errRes.detail;
                         } else if (errRes.error) {

@@ -43,6 +43,8 @@ class EmailRegisterRequest(BaseModel):
     password: str
     email: str
     code: str
+    captcha_id: str = ""      # 验证码ID
+    captcha_code: str = ""    # 用户输入的验证码
 
 class ResetPasswordRequest(BaseModel):
     email: str

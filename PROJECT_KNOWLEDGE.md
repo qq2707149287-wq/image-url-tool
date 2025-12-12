@@ -90,6 +90,7 @@ image-url-tool/
 - [x] 设备管理 (查看/踢出设备)
 - [x] 私有/共享模式
 - [x] 历史记录 (搜索/分页/批量操作)
+- [x] 图片违规检测 (NudeNet NSFW + CLIP 语义识别)
 - [x] 法律页面 (服务条款/隐私政策/侵权举报)
 - [x] Docker 持久化 (`DATA_DIR` 环境变量)
 - [x] 健康检查 (`/health` 接口)
@@ -136,7 +137,6 @@ python -c "from backend import database; database.set_user_vip('用户名', True
 ## 🚧 待办事项
 
 - [ ] 管理员 API (Web界面管理VIP/用户)
-- [ ] 图片违规检测 (NSFW/暴力内容)
 - [ ] 病毒式推广链接 (复制链接时附加水印)
 - [ ] VIP 权益页面
 

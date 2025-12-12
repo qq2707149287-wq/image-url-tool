@@ -7,7 +7,7 @@ WORKDIR /app
 # 1. 更换为清华源并安装 curl
 # (python:3.10-slim 基于 Debian，默认源在国内很慢，换成清华源加速)
 RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list && \
-  apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+  apt-get update && apt-get install -y curl libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
 
 # 2. 先只复制 requirements.txt
 COPY requirements.txt .

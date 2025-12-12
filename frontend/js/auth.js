@@ -25,6 +25,13 @@ document.addEventListener("DOMContentLoaded", function () {
     var rememberMeGroup = document.getElementById("rememberMeGroup");
     var authRememberMe = document.getElementById("authRememberMe");
 
+    // Captcha Elements (验证码)
+    var captchaGroup = document.getElementById("captchaGroup");
+    var captchaImage = document.getElementById("captchaImage");
+    var captchaInput = document.getElementById("captchaInput");
+    var refreshCaptchaBtn = document.getElementById("refreshCaptchaBtn");
+    var currentCaptchaId = null;  // 当前验证码ID
+
     // Modes: 'login', 'register', 'reset'
     var currentAuthMode = 'login';
     var token = localStorage.getItem("token");
@@ -75,6 +82,29 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (logoutBtn) {
         logoutBtn.onclick = handleLogout;
+    }
+
+    // Captcha Event Handlers (验证码事件)
+    if (refreshCaptchaBtn) {
+        refreshCaptchaBtn.onclick = loadCaptcha;
+    }
+    if (captchaImage) {
+        captchaImage.onclick = loadCaptcha;  // 点击图片也可刷新
+    }
+
+    // 加载验证码
+    async function loadCaptcha() {
+        try {
+            var res = await fetch('/captcha/generate');
+            if (res.ok) {
+                var data = await res.json();
+                currentCaptchaId = data.captcha_id;
+                if (captchaImage) captchaImage.src = data.image;
+                if (captchaInput) captchaInput.value = '';
+            }
+        } catch (e) {
+            console.error('加载验证码失败:', e);
+        }
     }
 
     // Functions
@@ -172,6 +202,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             if (emailGroup) emailGroup.style.display = "none";
             if (codeGroup) codeGroup.style.display = "none";
+            if (captchaGroup) captchaGroup.style.display = "none";  // 登录隐藏验证码
             if (passwordHint) passwordHint.style.display = "none";
             if (forgotPasswordLink) forgotPasswordLink.style.display = "inline";
             if (authUsernameInput) authUsernameInput.parentNode.style.display = "block";
@@ -219,6 +250,8 @@ document.addEventListener("DOMContentLoaded", function () {
             if (authUsernameInput) authUsernameInput.parentNode.style.display = "block";
             if (authPasswordInput) authPasswordInput.parentNode.parentNode.style.display = "block";
             if (rememberMeGroup) rememberMeGroup.style.display = "none";
+            if (captchaGroup) captchaGroup.style.display = "block";  // 注册显示验证码
+            loadCaptcha();  // 加载验证码图片
 
             if (googleBtn) googleBtn.style.display = "none";
 
@@ -240,6 +273,7 @@ document.addEventListener("DOMContentLoaded", function () {
             if (authUsernameInput) authUsernameInput.parentNode.style.display = "none";
             if (authPasswordInput) authPasswordInput.parentNode.parentNode.style.display = "block";
             if (rememberMeGroup) rememberMeGroup.style.display = "none";
+            if (captchaGroup) captchaGroup.style.display = "none";  // 重置密码隐藏验证码
 
             if (googleBtn) googleBtn.style.display = "none";
         }
@@ -380,12 +414,17 @@ document.addEventListener("DOMContentLoaded", function () {
             body.append("username", user);
             body.append("password", pass);
         } else if (currentAuthMode === 'register') {
+            // 获取验证码输入
+            var captchaCode = captchaInput ? captchaInput.value.trim() : '';
+
             endpoint = "/auth/register-email";
             body = JSON.stringify({
                 username: user,
                 password: pass,
                 email: email,
-                code: code
+                code: code,
+                captcha_id: currentCaptchaId || '',
+                captcha_code: captchaCode
             });
             headers["Content-Type"] = "application/json";
         } else if (currentAuthMode === 'reset') {
