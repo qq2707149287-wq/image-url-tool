@@ -1,22 +1,15 @@
-import os
-import tempfile
 import logging
 import io
 import sys
+import os
+import tempfile
 from PIL import Image
 import numpy as np
 
-# NudeNet
-from nudenet import NudeDetector
-
-# Transformers (CLIP models)
-try:
-    from transformers import ChineseCLIPProcessor, ChineseCLIPModel
-    from transformers import CLIPProcessor, CLIPModel  # OpenAI CLIP
-    import torch
-    HAS_CLIP = True
-except ImportError:
-    HAS_CLIP = False
+# [优化] 延迟导入: 不要在文件开头导入 PyTorch/NudeNet/Transformers
+# 否则会导致服务启动极慢，甚至在低内存服务器上直接 OOM
+# from nudenet import NudeDetector
+# from transformers ...
 
 # 设置日志 (强制配置到标准输出，确保用户能看见)
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -215,18 +208,25 @@ def get_nude_detector():
     global _nude_detector
     if _nude_detector is None:
         print("⏳ [系统] 初始化 NudeNet...", flush=True)
-        _nude_detector = NudeDetector()
+        try:
+            from nudenet import NudeDetector
+            _nude_detector = NudeDetector()
+        except ImportError as e:
+            print(f"❌ [系统] NudeNet 导入失败: {e}", flush=True)
+            return None
     return _nude_detector
 
 def get_chinese_clip():
     """加载 Chinese-CLIP 用于中国政治内容检测"""
     global _chinese_clip_model, _chinese_clip_processor
-    if not HAS_CLIP:
-        return None, None
-        
+    
     if _chinese_clip_model is None:
         print("⏳ [系统] 初始化 Chinese-CLIP (阿里达摩院版)...", flush=True)
         try:
+            # [Lazy Import]
+            from transformers import ChineseCLIPProcessor, ChineseCLIPModel
+            import torch
+            
             model_id = "OFA-Sys/chinese-clip-vit-base-patch16"
             _chinese_clip_model = ChineseCLIPModel.from_pretrained(model_id)
             _chinese_clip_processor = ChineseCLIPProcessor.from_pretrained(model_id)
@@ -239,12 +239,14 @@ def get_chinese_clip():
 def get_openai_clip():
     """加载 OpenAI CLIP 用于通用内容检测 (暴力/恐怖等)"""
     global _openai_clip_model, _openai_clip_processor
-    if not HAS_CLIP:
-        return None, None
         
     if _openai_clip_model is None:
         print("⏳ [系统] 初始化 OpenAI CLIP...", flush=True)
         try:
+            # [Lazy Import]
+            from transformers import CLIPProcessor, CLIPModel
+            import torch
+
             model_id = "openai/clip-vit-base-patch32"
             # [FIX] 显式设置 device_map 和 torch_dtype 避免 meta device 问题
             _openai_clip_model = CLIPModel.from_pretrained(
@@ -317,10 +319,10 @@ def check_image_safety(content: bytes, threshold: float = 0.50) -> dict:
         if temp_path and os.path.exists(temp_path): os.remove(temp_path)
 
     # --- 2. Chinese-CLIP 检测 (中国政治内容) ---
-    if HAS_CLIP:
-        try:
-            model, processor = get_chinese_clip()
-            if model:
+    # [Lazy Import] 移除全局 HAS_CLIP 检查
+    try:
+        model, processor = get_chinese_clip()
+        if model:
                 image = Image.open(io.BytesIO(content))
                 inputs = processor(text=CHINESE_ALL_LABELS, images=image, return_tensors="pt", padding=True)
                 
@@ -361,16 +363,16 @@ def check_image_safety(content: bytes, threshold: float = 0.50) -> dict:
                     print(f"📊 [Chinese-CLIP] 通过 (TOP: {max_label})", flush=True)
                 result["details"]["chinese_clip"] = dict(zip(CHINESE_ALL_LABELS, probs_list))
                     
-        except Exception as e:
-            print(f"❌ [Chinese-CLIP] 错误: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
+    except Exception as e:
+        print(f"❌ [Chinese-CLIP] 错误: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
 
     # --- 3. OpenAI CLIP 检测 (通用内容: 恐怖/暴力/毒品) ---
-    if HAS_CLIP:
-        try:
-            model, processor = get_openai_clip()
-            if model:
+    # [Lazy Import] 移除全局 HAS_CLIP 检查
+    try:
+        model, processor = get_openai_clip()
+        if model:
                 image = Image.open(io.BytesIO(content))
                 inputs = processor(text=OPENAI_ALL_LABELS, images=image, return_tensors="pt", padding=True)
                 
@@ -402,9 +404,9 @@ def check_image_safety(content: bytes, threshold: float = 0.50) -> dict:
                     print(f"📊 [OpenAI-CLIP] 通过 (TOP: {max_label})", flush=True)
                     result["details"]["openai_clip"] = dict(zip(OPENAI_ALL_LABELS, probs_list))
                     
-        except Exception as e:
-            print(f"❌ [OpenAI-CLIP] 错误: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
+    except Exception as e:
+        print(f"❌ [OpenAI-CLIP] 错误: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
 
     return result
