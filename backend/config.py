@@ -44,3 +44,7 @@ MIME_TYPE_MAP = {
     ".svg": "image/svg+xml",
     ".ico": "image/x-icon",
 }
+
+# ==================== AI 审核配置 ====================
+# 低内存服务器设为 true 以禁用 AI 审核 (节省 ~2GB 内存)
+DISABLE_AI_AUDIT = os.getenv("DISABLE_AI_AUDIT", "false").lower() == "true"
