@@ -1,0 +1,3 @@
+Admin Headers: {}
+Admin Reports Status: 401
+Admin Reports Body: {"detail":"Could not validate credentials"}

@@ -6,7 +6,9 @@ import uuid
 from io import BytesIO
 from typing import Optional
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Request, Response, Form, Depends
+from fastapi import APIRouter, File, UploadFile, HTTPException, Request, Response, Form, Depends, BackgroundTasks
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
+from fastapi.templating import Jinja2Templates
 from fastapi.responses import JSONResponse, StreamingResponse
 from PIL import Image
 
@@ -35,6 +37,9 @@ MAX_FILE_SIZE = config.MAX_FILE_SIZE
 ALLOWED_EXTENSIONS = config.ALLOWED_EXTENSIONS
 CACHE_MAX_AGE = config.CACHE_MAX_AGE
 MIME_TYPE_MAP = config.MIME_TYPE_MAP
+
+# Setup Templates
+templates = Jinja2Templates(directory="frontend")
 
 # ==================== 工具函数 ====================
 
@@ -86,12 +91,65 @@ def build_upload_response(
         "content_type": upload_result["content_type"]
     }
 
+# ==================== Background Tasks ====================
+def background_audit_task(
+    content: bytes, 
+    filename: str, 
+    fhash: str, 
+    object_name: str,
+    user_id: int = None,
+    device_id: str = None
+) -> None:
+    """后台异步审核任务"""
+    try:
+        logger.info(f"🔍 [BackAudit] 开始后台审核: {filename} ({fhash})")
+        
+        # 执行审核 (同步执行即可，因为已经在后台线程中)
+        audit_res = audit.check_image_safety(content)
+        
+        if not audit_res["safe"]:
+            logger.warning(f"🚫 [BackAudit] 发现违规: {filename} - {audit_res['reason']}")
+            
+            # 1. 删除 MinIO 文件
+            # 从 object_name 中提取文件名 (其实 object_name 就是文件名Key)
+            del_minio = storage.delete_from_minio(object_name)
+            if del_minio:
+                logger.info(f"🗑️ [BackAudit] MinIO 文件已清理: {object_name}")
+            else:
+                logger.error(f"❌ [BackAudit] MinIO 清理失败: {object_name}")
+                
+            # 2. 删除数据库记录
+            del_db = database.delete_image_by_hash_system(fhash)
+            if del_db:
+                logger.info(f"🗑️ [BackAudit] DB 记录已清理: {fhash}")
+            else:
+                logger.error(f"❌ [BackAudit] DB 清理失败: {fhash}")
+            
+            # 3. [NEW] 发送通知给用户
+            if user_id or device_id:
+                database.create_notification(
+                    user_id=user_id,
+                    device_id=device_id,
+                    type="moderation_reject",
+                    title="图片已被系统删除",
+                    message=f"您上传的图片 '{filename}' 因违规已被系统自动删除。原因：{audit_res['reason']}"
+                )
+                logger.info(f"📢 [BackAudit] 已发送通知: user={user_id}, device={device_id}")
+                
+        else:
+            logger.info(f"✅ [BackAudit] 审核通过: {filename}")
+            
+    except Exception as e:
+        logger.error(f"❌ [BackAudit] 任务异常: {e}", exc_info=True)
+
+
 # ==================== Endpoints ====================
 
 @router.post("/upload")
 async def upload_endpoint(
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     shared_mode: str = Form("false"),
     current_user: Optional[dict] = Depends(get_current_user_optional)
@@ -149,18 +207,9 @@ async def upload_endpoint(
         # 4. Image Info
         info = get_image_info(content)
         
-        # 5. Content Audit (NudeNet, CLIP) - Run in threadpool to avoid blocking
-        audit_res = await run_in_threadpool(audit.check_image_safety, content)
-        if not audit_res["safe"]:
-            logger.warning(f"🚫 拦截违规图片: {filename} ({audit_res['reason']})")
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False, 
-                    "error": f"图片包含违规内容: {audit_res['reason']}",
-                    "audit_details": audit_res.get("details")
-                }
-            )
+        # 5. Content Audit (已移至后台异步处理)
+        # audit_res = await run_in_threadpool(audit.check_image_safety, content)
+        # (移除了同步阻塞逻辑)
         
         # 6. Upload to Storage (MinIO) - Sync function
         content_type = file.content_type or "application/octet-stream"
@@ -198,7 +247,19 @@ async def upload_endpoint(
         if user_id:
             database.log_user_activity(user_id, "UPLOAD", ip_address, request.headers.get("user-agent"))
 
-        logger.info(f"✅ 上传成功: {filename} -> {url}")
+        # 8. Trigger Background Audit
+        # 传递必要参数用于后续清理和通知
+        background_tasks.add_task(
+            background_audit_task, 
+            content=content, 
+            filename=filename, 
+            fhash=fhash, 
+            object_name=upload_result['key'],
+            user_id=user_id,
+            device_id=device_id
+        )
+
+        logger.info(f"✅ 上传成功(已入库，审核后台运行中): {filename} -> {url}")
         
         return JSONResponse({
             "success": True,
@@ -210,7 +271,8 @@ async def upload_endpoint(
             "height": info["height"],
             "size": info["size"],
             "content_type": content_type,
-            "audit_logs": audit_res.get("details", {}),
+            "content_type": content_type,
+            # "audit_logs": ... (异步模式下不返回审核结果)
             "all_results": [{
                 "service": "MyCloud",
                 "success": True,
@@ -228,9 +290,99 @@ async def upload_endpoint(
             content={"success": False, "error": f"服务器内部错误: {str(e)}"}
         )
 
+
+@router.get("/view/{image_identifier}", response_class=HTMLResponse)
+async def view_image_page(request: Request, image_identifier: str):
+    """
+    广告落地页 (Landing Page)
+    :param image_identifier: 图片的 hash 或者 filename
+    """
+    try:
+        # 1. 尝试从数据库查找图片信息
+        # 我们需要先根据 identifier 找到对应的记录
+        # database.py 目前没有直接根据 hash 或 filename 查找单条记录的公开函数 (只有 list)
+        # 所以我们得手写一段 SQL 或者修改 database.py。
+        # 这里为了不改动 database.py, 我们直接在这里查询 (虽然不太优雅，但最快)
+        
+        with database.get_db_connection() as conn:
+            conn.row_factory = database.sqlite3.Row
+            c = conn.cursor()
+            
+            # 尝试匹配 hash 或 filename
+            # filename 可能是 URL 编码的，也可能包含后缀
+            # 优先匹配 hash (通常是无后缀的)
+            c.execute("SELECT * FROM history WHERE hash = ? OR filename = ?", (image_identifier, image_identifier))
+            row = c.fetchone()
+            
+            if not row:
+                # 可能是带后缀的文件名，尝试去掉后缀再查 hash? 或者是 filename
+                # 暂时只支持精确匹配
+                return templates.TemplateResponse("view.html", {
+                    "request": request,
+                    "filename": "404 Not Found",
+                    "raw_url": "/static/404.png", # 只有你有这个图
+                    "width": 0,
+                    "height": 0,
+                    "size_str": "0 KB",
+                    "created_at": "-",
+                    "page_url": str(request.url)
+                }, status_code=404)
+
+            item = dict(row)
+            
+            # Format size
+            size_bytes = item.get("size", 0)
+            if size_bytes < 1024:
+                size_str = f"{size_bytes} B"
+            elif size_bytes < 1024 * 1024:
+                size_str = f"{size_bytes / 1024:.1f} KB"
+            else:
+                size_str = f"{size_bytes / 1024 / 1024:.1f} MB"
+
+            return templates.TemplateResponse("view.html", {
+                "request": request,
+                "filename": item.get("filename"),
+                "raw_url": item.get("url"),
+                "width": item.get("width"),
+                "height": item.get("height"),
+                "size_str": size_str,
+                "created_at": item.get("created_at"),
+                "page_url": str(request.url)
+            })
+
+    except Exception as e:
+        logger.error(f"Render landing page failed: {e}")
+        return HTMLResponse(content=f"<h1>Error: {e}</h1>", status_code=500)
+
+from .. import security
+
 @router.get("/mycloud/{object_name:path}")
-def get_mycloud_image(object_name: str) -> StreamingResponse:
+def get_mycloud_image(
+    object_name: str, 
+    token: Optional[str] = None, 
+    expires: Optional[int] = None
+) -> StreamingResponse:
     validate_object_path(object_name)
+
+    # [SECURITY] 核心鉴权逻辑
+    # 1. 查询图片属性
+    target_url = f"/mycloud/{object_name}"
+    image_record = database.get_image_by_url(target_url)
+
+    # [SECURITY] 核心鉴权逻辑修改:
+    # 私有图片仅仅是不出现在公共列表 (Shared Mode) 中
+    # 但通过 URL (直链) 仍然是可以直接访问的，不需要强制签名
+    # 只有 VIP 专属签名 (用于防盗链有效期控制) 才是可选的增强功能
+    # 所以这里不再拦截无签名的私有图片访问
+    
+    # if image_record:
+    #     is_shared = image_record.get("is_shared", 0)
+    #     # 原逻辑: 私有图片必须签名 -> 删除
+    
+    # 但保留对 token/expires 的校验 (如果 URL 里带了签名参数，我们就校验它，防止伪造的签名)
+    if token and expires:
+        if not security.verify_url_signature(object_name, token, expires):
+            raise HTTPException(status_code=403, detail="直链签名无效或已过期")
 
     try:
         obj = storage.get_minio_object(object_name)

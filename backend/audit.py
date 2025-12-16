@@ -2,6 +2,11 @@ import logging
 import io
 import sys
 import os
+
+# [FIX] 强制使用 HuggingFace 国内镜像，解决国内网络无法下载 AI 模型的问题
+# 必须在导入 transformers 之前设置
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
 import tempfile
 from PIL import Image
 import numpy as np
@@ -16,7 +21,7 @@ logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 # 参考地图路径 (用于台湾检测)
-REFERENCE_MAP_PATH = os.path.join(os.path.dirname(__file__), "reference_china_map.jpg")
+REFERENCE_MAP_PATH = os.path.join(os.path.dirname(__file__), "data", "reference_china_map.jpg")
 
 # 全局模型单例
 _nude_detector = None
@@ -220,19 +225,42 @@ def get_chinese_clip():
     """加载 Chinese-CLIP 用于中国政治内容检测"""
     global _chinese_clip_model, _chinese_clip_processor
     
-    if _chinese_clip_model is None:
+    if _chinese_clip_model is None or _chinese_clip_processor is None:
         print("⏳ [系统] 初始化 Chinese-CLIP (阿里达摩院版)...", flush=True)
         try:
-            # [Lazy Import]
-            from transformers import ChineseCLIPProcessor, ChineseCLIPModel
             import torch
-            
+            try:
+                # 优先尝试官方推荐的专用类
+                from transformers import ChineseCLIPProcessor, ChineseCLIPModel
+                ModelClass = ChineseCLIPModel
+                ProcessorClass = ChineseCLIPProcessor
+            except ImportError:
+                # 兼容旧版本 transformers：尝试使用 Auto 类
+                print("⚠️ [系统] transformers 版本不支持 ChineseCLIPProcessor，尝试使用 AutoProcessor...", flush=True)
+                from transformers import AutoProcessor, AutoModel
+                ModelClass = AutoModel
+                ProcessorClass = AutoProcessor
+
             model_id = "OFA-Sys/chinese-clip-vit-base-patch16"
-            _chinese_clip_model = ChineseCLIPModel.from_pretrained(model_id)
-            _chinese_clip_processor = ChineseCLIPProcessor.from_pretrained(model_id)
+            # [Fix] 使用临时变量，确保加载完全成功后再赋值给全局变量
+            # [Fix 2] 添加 attn_implementation='eager' 解决 transformers 4.50+ 的 meta device bug
+            model = ModelClass.from_pretrained(
+                model_id, 
+                low_cpu_mem_usage=False,
+                attn_implementation="eager"  # 显式使用 eager attention，避免 SDPA meta bug
+            )
+            processor = ProcessorClass.from_pretrained(model_id)
+            
+            _chinese_clip_model = model
+            _chinese_clip_processor = processor
             print("✅ [系统] Chinese-CLIP 加载完成 (中国政治内容检测)", flush=True)
         except Exception as e:
-            print(f"❌ [系统] Chinese-CLIP 加载失败: {e}", flush=True)
+            # 降级处理：不影响主流程，只打印警告
+            print(f"⚠️ [系统] Chinese-CLIP 加载失败: {e}", flush=True)
+            print("   (将跳过中国政治内容检测，仅使用 OpenAI CLIP)", flush=True)
+            # 确保全局变量重置为 None，防止部分加载
+            _chinese_clip_model = None
+            _chinese_clip_processor = None
             return None, None
     return _chinese_clip_model, _chinese_clip_processor
 
@@ -240,7 +268,7 @@ def get_openai_clip():
     """加载 OpenAI CLIP 用于通用内容检测 (暴力/恐怖等)"""
     global _openai_clip_model, _openai_clip_processor
         
-    if _openai_clip_model is None:
+    if _openai_clip_model is None or _openai_clip_processor is None:
         print("⏳ [系统] 初始化 OpenAI CLIP...", flush=True)
         try:
             # [Lazy Import]
@@ -248,16 +276,19 @@ def get_openai_clip():
             import torch
 
             model_id = "openai/clip-vit-base-patch32"
-            # [FIX] 显式设置 device_map 和 torch_dtype 避免 meta device 问题
-            _openai_clip_model = CLIPModel.from_pretrained(
-                model_id, 
-                device_map=None,  # 不使用自动设备映射
-                low_cpu_mem_usage=False  # 禁用低内存模式，避免 meta device
-            ).to("cpu")  # 显式移到 CPU
-            _openai_clip_processor = CLIPProcessor.from_pretrained(model_id)
+            # [FIX] 使用临时变量，防止部分加载导致全局状态不一致
+            # 添加 device_map=None 防止 accelerate 自动将模型放到 meta device
+            model = CLIPModel.from_pretrained(model_id, low_cpu_mem_usage=False, device_map=None)
+            model.to('cpu') # 显式移动到 CPU
+            processor = CLIPProcessor.from_pretrained(model_id)
+            
+            _openai_clip_model = model
+            _openai_clip_processor = processor
             print("✅ [系统] OpenAI CLIP 加载完成 (通用内容检测)", flush=True)
         except Exception as e:
             print(f"❌ [系统] OpenAI CLIP 加载失败: {e}", flush=True)
+            _openai_clip_model = None
+            _openai_clip_processor = None
             return None, None
     return _openai_clip_model, _openai_clip_processor
 
@@ -265,6 +296,12 @@ def check_image_safety(content: bytes, threshold: float = 0.50) -> dict:
     # 强制打印，确保用户能看到
     print("\n🔍 [Audit] 开始新一轮图片审计 (Powered by NudeNet & CLIP & 地图检测)...", flush=True)
     
+    # [FIX] 解决 check_image_safety 中使用 torch.no_grad() 但未导入 torch 的问题
+    try:
+        import torch
+    except ImportError:
+        print("❌ [系统] 无法导入 torch, AI 审核将受限", flush=True)
+
     result = {"safe": True, "score": 0.0, "reason": "Pass", "details": {}}
     
     # --- 0. 地图检测 (已禁用 - 误判率太高) ---
@@ -280,7 +317,15 @@ def check_image_safety(content: bytes, threshold: float = 0.50) -> dict:
     try:
         temp_path = None
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            tmp.write(content)
+            # [FIX] 使用 Pillow 统一转换为 JPG，防止 OpenCV 读取 WebP/AVIF 失败导致 NoneType 错误
+            try:
+                img_pil = Image.open(io.BytesIO(content))
+                if img_pil.mode != "RGB":
+                    img_pil = img_pil.convert("RGB")
+                img_pil.save(tmp, format="JPEG")
+            except Exception:
+                # 如果转换失败（极少情况），尝试直接写入原数据
+                tmp.write(content)
             temp_path = tmp.name
         
         detector = get_nude_detector()
@@ -314,7 +359,9 @@ def check_image_safety(content: bytes, threshold: float = 0.50) -> dict:
             print("✅ [NudeNet] 通过")
             
     except Exception as e:
+        error_msg = f"NudeNet Error: {str(e)}"
         print(f"❌ [NudeNet] 错误: {e}")
+        result["details"]["nudenet_error"] = error_msg
     finally:
         if temp_path and os.path.exists(temp_path): os.remove(temp_path)
 
@@ -322,7 +369,7 @@ def check_image_safety(content: bytes, threshold: float = 0.50) -> dict:
     # [Lazy Import] 移除全局 HAS_CLIP 检查
     try:
         model, processor = get_chinese_clip()
-        if model:
+        if model and processor:
                 image = Image.open(io.BytesIO(content))
                 inputs = processor(text=CHINESE_ALL_LABELS, images=image, return_tensors="pt", padding=True)
                 
@@ -364,15 +411,17 @@ def check_image_safety(content: bytes, threshold: float = 0.50) -> dict:
                 result["details"]["chinese_clip"] = dict(zip(CHINESE_ALL_LABELS, probs_list))
                     
     except Exception as e:
+        error_msg = f"Chinese-CLIP Error: {str(e)}"
         print(f"❌ [Chinese-CLIP] 错误: {e}", flush=True)
         import traceback
         traceback.print_exc()
+        result["details"]["chinese_clip_error"] = error_msg
 
     # --- 3. OpenAI CLIP 检测 (通用内容: 恐怖/暴力/毒品) ---
     # [Lazy Import] 移除全局 HAS_CLIP 检查
     try:
         model, processor = get_openai_clip()
-        if model:
+        if model and processor:
                 image = Image.open(io.BytesIO(content))
                 inputs = processor(text=OPENAI_ALL_LABELS, images=image, return_tensors="pt", padding=True)
                 
@@ -405,8 +454,10 @@ def check_image_safety(content: bytes, threshold: float = 0.50) -> dict:
                     result["details"]["openai_clip"] = dict(zip(OPENAI_ALL_LABELS, probs_list))
                     
     except Exception as e:
+        error_msg = f"OpenAI-CLIP Error: {str(e)}"
         print(f"❌ [OpenAI-CLIP] 错误: {e}", flush=True)
         import traceback
         traceback.print_exc()
+        result["details"]["openai_clip_error"] = error_msg
 
     return result

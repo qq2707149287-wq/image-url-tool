@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Twitter Card data -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ filename }}">
+    <meta name="twitter:description" content="上传于私有云图床 (Image URL Tool)">
+    <meta name="twitter:image" content="{{ raw_url }}">
+
+    <!-- Open Graph data -->
+    <meta property="og:title" content="{{ filename }}" />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="{{ page_url }}" />
+    <meta property="og:image" content="{{ raw_url }}" />
+    <meta property="og:description" content="上传于私有云图床 (Image URL Tool)" />
+
+    <title>{{ filename }} - 私有云图床</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --border-color: #e1e4e8;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: var(--card-bg);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* 广告位样式 - 占位符 */
+        .ad-slot {
+            width: 100%;
+            max-width: 728px;
+            height: 90px;
+            background-color: #e9ecef;
+            border: 1px dashed #cbd5e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+            margin: 20px 0;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .image-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            max-width: 100%;
+            width: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        .image-preview {
+            max-width: 100%;
+            max-height: 70vh;
+            /* 限制高度，确保不把广告挤没了 */
+            border-radius: 4px;
+            object-fit: contain;
+            cursor: zoom-in;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .action-bar {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background-color: #e9ecef;
+            color: #495057;
+        }
+
+        .btn-secondary:hover {
+            background-color: #dee2e6;
+        }
+
+        .btn-icon {
+            margin-right: 5px;
+        }
+
+        .info-bar {
+            margin-top: 15px;
+            color: #6c757d;
+            font-size: 12px;
+            text-align: center;
+            display: flex;
+            gap: 15px;
+        }
+
+        .count-down-tip {
+            margin-top: 15px;
+            font-size: 15px;
+            color: var(--primary-color);
+            font-weight: bold;
+            background: #e7f5ff;
+            padding: 8px 16px;
+            border-radius: 20px;
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .header {
+                padding: 10px 15px;
+            }
+
+            .ad-slot {
+                height: 100px;
+                max-width: 100%;
+            }
+
+            .main-container {
+                padding: 10px;
+            }
+
+            .image-card {
+                padding: 10px;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="header">
+        <a href="/" class="logo">☁️ 私有云图床</a>
+        <a href="/" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">我也要上传</a>
+    </header>
+
+    <div class="main-container">
+
+        <!-- TOP AD (728x90) -->
+        <div class="ad-slot" id="ad-top">
+            <div>
+                <strong>📢 广告位招租</strong><br>
+                <span style="font-size:12px; opacity:0.7">联系站长投放: me@example.com</span>
+            </div>
+            <!-- 备案后替换为联盟代码 -->
+        </div>
+
+        <div class="image-card">
+            <a href="{{ raw_url }}" target="_blank">
+                <img src="{{ raw_url }}" alt="{{ filename }}" class="image-preview" onclick="window.open(this.src)">
+            </a>
+
+            <div class="info-bar">
+                <span>📏 {{ width }} x {{ height }}</span>
+                <span>💾 {{ size_str }}</span>
+                <span>📅 {{ created_at }}</span>
+            </div>
+
+            <div class="count-down-tip" id="countdown">
+                ⏳ 正在加载原图链接 (3s)...
+            </div>
+
+            <div class="action-bar">
+                <a href="{{ raw_url }}" class="btn btn-primary" id="viewRawBtn"
+                    style="display:none; pointer-events: none; opacity: 0.6;" download="{{ filename }}">
+                    <span class="btn-icon">⬇️</span> 下载 / 查看原图
+                </a>
+                <button class="btn btn-secondary" onclick="sharePage()">
+                    <span class="btn-icon">🔗</span> 分享此页面
+                </button>
+                <button class="btn btn-secondary" onclick="openReportModal()" style="color: #d32f2f;">
+                    <span class="btn-icon">🚨</span> 举报此图片
+                </button>
+            </div>
+        </div>
+
+        <!-- BOTTOM AD (728x90) -->
+        <div class="ad-slot" id="ad-bottom">
+            <div>
+                <strong>公益广告:宝贝回家</strong><br>
+                <span style="font-size:12px; opacity:0.7">帮助走失儿童回家 (此处为模拟广告位)</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 举报模态框 -->
+    <div id="reportModal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div
+            style="background:white; padding:25px; border-radius:12px; max-width:400px; width:90%; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+            <h3 style="margin-top:0; color:#d32f2f;">🚨 举报此图片</h3>
+            <p style="color:#666; font-size:14px;">如果您认为此图片违反了法律法规或服务条款，请说明原因。</p>
+
+            <div style="margin-bottom:15px;">
+                <label style="display:block; margin-bottom:5px; font-weight:bold;">举报原因 *</label>
+                <textarea id="reportReason" rows="4"
+                    style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; resize:vertical; box-sizing:border-box;"
+                    placeholder="请详细描述问题，如：侵犯版权、色情内容、违法信息等"></textarea>
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label style="display:block; margin-bottom:5px; font-weight:bold;">联系方式 (可选)</label>
+                <input type="text" id="reportContact"
+                    style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; box-sizing:border-box;"
+                    placeholder="邮箱或其他联系方式，方便我们回复您">
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button onclick="closeReportModal()" class="btn btn-secondary">取消</button>
+                <button onclick="submitReport()" class="btn btn-primary" style="background:#d32f2f;">提交举报</button>
+            </div>
+        </div>
+    </div>
+
+    <footer style="margin-top:auto; padding:20px; text-align:center; color:#adb5bd; font-size:12px;">
+        &copy; 2025 Image URL Tool. All rights reserved.
+    </footer>
+
+    <script>
+        // 倒计时逻辑
+        let timeLeft = 3;
+        const countdownEl = document.getElementById('countdown');
+        const viewRawBtn = document.getElementById('viewRawBtn');
+
+        // 预加载图片以确保显示
+        const img = new Image();
+        img.src = "{{ raw_url }}";
+
+        const timer = setInterval(() => {
+            timeLeft--;
+            if (timeLeft > 0) {
+                countdownEl.innerText = `⏳ 正在加载原图链接 (${timeLeft}s)...`;
+            } else {
+                clearInterval(timer);
+                countdownEl.style.display = 'none';
+                viewRawBtn.style.display = 'inline-flex';
+                viewRawBtn.style.pointerEvents = 'auto';
+                viewRawBtn.style.opacity = '1';
+                // viewRawBtn.innerText = '⬇️ 下载 / 查看原图'; 
+            }
+        }, 1000);
+
+        function sharePage() {
+            if (navigator.share) {
+                navigator.share({
+                    title: '{{ filename }}',
+                    text: '来看看这张图片',
+                    url: window.location.href,
+                });
+            } else {
+                navigator.clipboard.writeText(window.location.href);
+                showToast('✅ 链接已复制到剪贴板');
+            }
+        }
+
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.innerText = message;
+            toast.style.position = 'fixed';
+            toast.style.bottom = '20px';
+            toast.style.left = '50%';
+            toast.style.transform = 'translateX(-50%)';
+            toast.style.background = 'rgba(0,0,0,0.8)';
+            toast.style.color = 'white';
+            toast.style.padding = '10px 20px';
+            toast.style.borderRadius = '5px';
+            toast.style.zIndex = '1001';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+
+        // 举报功能
+        function openReportModal() {
+            document.getElementById('reportModal').style.display = 'flex';
+        }
+
+        function closeReportModal() {
+            document.getElementById('reportModal').style.display = 'none';
+            document.getElementById('reportReason').value = '';
+            document.getElementById('reportContact').value = '';
+        }
+
+        async function submitReport() {
+            const reason = document.getElementById('reportReason').value.trim();
+            const contact = document.getElementById('reportContact').value.trim();
+
+            if (!reason) {
+                alert('请填写举报原因');
+                return;
+            }
+
+            // 从 URL 提取 hash
+            const pathParts = window.location.pathname.split('/');
+            const imageHash = pathParts[pathParts.length - 1];
+
+            try {
+                const res = await fetch('/api/report', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_hash: imageHash,
+                        image_url: window.location.href,
+                        reason: reason,
+                        contact: contact || null
+                    })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    closeReportModal();
+                    showToast('✅ 感谢您的举报，我们会尽快处理');
+                } else {
+                    alert(data.detail || '举报提交失败，请稍后重试');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('网络错误，请稍后重试');
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -46,10 +46,20 @@ body {
 }
 
 /* 头部与导航 */
+/* 头部与导航 */
 .header {
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap; /* 允许换行，防止窄屏下重叠 */
     margin-bottom: 30px;
-    position: relative;
+    gap: 15px; /* 元素间距 */
+}
+
+.header-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
 }
 
 .header h1 {
@@ -64,9 +74,9 @@ body {
 }
 
 .header-tools {
-    position: absolute;
-    right: 0;
-    top: 0;
+    /* 移除 absolute，让其自然流式排列 */
+    display: flex;
+    gap: 5px;
 }
 
 .btn-ghost {
@@ -578,4 +588,115 @@ body {
 
 .copyright {
     opacity: 0.8;
+}
+
+/* ============================================
+   Share Modal Styles (分享模态框专用样式)
+   ============================================ */
+
+.share-links-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.share-row {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.share-row:last-child {
+    border-bottom: none;
+}
+
+.share-row label {
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-color);
+    cursor: pointer;
+    user-select: none;
+}
+
+.share-row .arrow {
+    margin-left: 8px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+}
+
+.collapse-toggle:hover {
+    background: var(--bg-color);
+    margin: 0 -15px;
+    padding: 12px 15px;
+    border-radius: 6px;
+}
+
+.collapsed-content {
+    padding-left: 0 !important;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    border-bottom: none !important;
+}
+
+.share-row .input-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.share-row .input-group input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-family: monospace;
+}
+
+.share-row .input-group input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.share-row .input-group button {
+    padding: 10px 16px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.share-row .input-group button:hover {
+    background: var(--primary-hover);
+}
+
+.vip-tag {
+    display: inline-block;
+    background: linear-gradient(45deg, #FFD700, #FFA500);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    margin-left: 8px;
+}
+
+#shareRawVipTip a,
+#shareMdGuestTip a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+#shareRawVipTip a:hover,
+#shareMdGuestTip a:hover {
+    text-decoration: underline;
 }

@@ -3,7 +3,7 @@ import os
 import logging
 import uuid
 from contextlib import contextmanager
-from typing import List, Dict, Any, Generator
+from typing import List, Dict, Any, Generator, Optional
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -34,14 +34,20 @@ def get_db_connection() -> Generator[sqlite3.Connection, None, None]:
         ...
     # 离开 with 代码块时，会自动执行 finally 里的 conn.close()
     """
-    conn = sqlite3.connect(DB_PATH) # 连接到 SQLite 数据库文件
+@contextmanager
+def get_db_connection() -> Generator[sqlite3.Connection, None, None]:
+    """
+    获取数据库连接的上下文管理器。
+    """
+    # [Fix] 增加超时时间到 30秒，防止高并发下 "database is locked" 错误
+    conn = sqlite3.connect(DB_PATH, timeout=30.0) 
     try:
-        yield conn # 把连接对象"交"给调用者使用
+        yield conn 
     finally:
-        conn.close() # 无论如何（即使报错），最后都会执行这一步关闭连接
-
+        conn.close() 
 
 def init_db() -> None:
+
     """
     初始化 SQLite 数据库。
     在程序启动时调用，确保数据库表已经存在。
@@ -200,6 +206,43 @@ def init_db() -> None:
                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)''')
 
+            # 8. 用户通知表 (审核结果、系统消息等)
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_notifications'")
+            if not c.fetchone():
+                c.execute('''CREATE TABLE user_notifications
+                             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                              user_id INTEGER,
+                              device_id TEXT,
+                              type TEXT NOT NULL,
+                              title TEXT,
+                              message TEXT NOT NULL,
+                              is_read INTEGER DEFAULT 0,
+                              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                              FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)''')
+                c.execute("CREATE INDEX IF NOT EXISTS idx_notif_user ON user_notifications(user_id)")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_notif_device ON user_notifications(device_id)")
+                logger.info("✅ 已创建 user_notifications 表")
+
+            # 9. 侵权举报表
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='abuse_reports'")
+            if not c.fetchone():
+                c.execute('''CREATE TABLE abuse_reports
+                             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                              image_hash TEXT,
+                              image_url TEXT,
+                              reporter_id INTEGER,
+                              reporter_device TEXT,
+                              reporter_contact TEXT,
+                              reason TEXT NOT NULL,
+                              status TEXT DEFAULT 'pending',
+                              admin_notes TEXT,
+                              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                              resolved_at TIMESTAMP,
+                              FOREIGN KEY(reporter_id) REFERENCES users(id))''')
+                c.execute("CREATE INDEX IF NOT EXISTS idx_report_status ON abuse_reports(status)")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_report_hash ON abuse_reports(image_hash)")
+                logger.info("✅ 已创建 abuse_reports 表")
+
             conn.commit() # 提交事务，保存更改
         logger.info(f"✅ 数据库已就绪: {DB_PATH}")
     except Exception as e:
@@ -314,19 +357,26 @@ def get_history_list(page: int = 1, page_size: int = 20, keyword: str = "",
                     elif device_id:
                         conditions.append("device_id = ?")
                         params.append(device_id)
+            elif view_mode == "admin_all":
+                # [Admin] 上帝模式：查看所有记录 (私有+共享)
+                # 只有管理员能进入此逻辑 (Router层需校验)
+                pass 
             else:
                 # 私有模式：
                 if user_id:
                     # 登录用户只看自己的
                     conditions.append("user_id = ?")
+                    # conditions.append("is_shared = 0") # [Change] 私有视图是否应该包含共享？
+                    # 通常"我的文件"应该包含我上传的所有文件(无论私有还是共享)
+                    # 但原逻辑似乎区分了 Tab。即使是 Private Tab，一般也只显示 is_shared=0
+                    # 保持原逻辑：Private Tab 只显示私有文件
                     conditions.append("is_shared = 0")
                     params.append(user_id)
                 else:
                     # 未登录用户看设备的
                     conditions.append("device_id = ?")
                     conditions.append("is_shared = 0")
-                    # 还要确保 user_id 为空，避免未登录用户看到该设备上登录用户的数据(理论上不会发生，因为登录用户有user_id)
-                    # 但为了安全，可以加上 AND user_id IS NULL
+                    # 还要确保 user_id 为空
                     conditions.append("user_id IS NULL")
                     params.append(device_id)
 
@@ -362,6 +412,8 @@ def get_history_list(page: int = 1, page_size: int = 20, keyword: str = "",
                     elif device_id:
                         count_conditions.append("device_id = ?")
                         count_params.append(device_id)
+            elif view_mode == "admin_all":
+                pass
             else:
                 if user_id:
                     count_conditions.append("user_id = ?")
@@ -521,6 +573,52 @@ def rename_history_item(item_id: int, filename: str, device_id: str = None, user
         return {"success": False, "error": str(e)}
 
 
+def delete_image_by_hash_system(file_hash: str) -> bool:
+    """
+    系统级物理删除图片记录 (用于 AI 违规清理)
+    包含重试机制，防止数据库锁导致删除失败
+    """
+    import time
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            with get_db_connection() as conn:
+                c = conn.cursor()
+                logger.info(f"🗑️ [Database] 尝试删除 Hash 记录: {file_hash} (Attempt {attempt+1})")
+                
+                # Check existance first for debugging
+                c.execute("SELECT count(*) FROM history WHERE hash = ?", (file_hash,))
+                count = c.fetchone()[0]
+                if count == 0:
+                    logger.info(f"⚠️ [Database] 要删除的记录不存在(可能已被清理): {file_hash}")
+                    return True # 视为成功
+                
+                c.execute("DELETE FROM history WHERE hash = ?", (file_hash,))
+                rows = c.rowcount
+                conn.commit()
+                
+                if rows > 0:
+                    logger.info(f"✅ [Database] 成功删除 {rows} 条记录: {file_hash}")
+                    return True
+                else:
+                    logger.warning(f"⚠️ [Database] 删除执行成功但影响行数为0: {file_hash}")
+                    return True 
+
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e):
+                logger.warning(f"⚠️ [Database] 数据库被锁定，等待重试... ({e})")
+                time.sleep(1) # Wait 1s before retry
+            else:
+                logger.error(f"❌ [Database] 系统删除失败 (OperationalError): {e}")
+                return False
+        except Exception as e:
+            logger.error(f"❌ [Database] 系统删除失败 ({file_hash}): {e}")
+            return False
+            
+    return False
+
+
 def create_user(username: str, password_hash: str) -> bool:
     """创建新用户"""
     try:
@@ -549,6 +647,36 @@ def get_user_by_username(username: str) -> Dict[str, Any]:
             return None
     except Exception as e:
         logger.error(f"查找用户失败: {e}")
+        return None
+
+
+
+def get_image_by_hash(file_hash: str) -> Optional[Dict[str, Any]]:
+    """根据 Hash 查找图片记录"""
+    try:
+        with get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute("SELECT * FROM history WHERE hash = ?", (file_hash,))
+            row = c.fetchone()
+            if row:
+                return dict(row)
+    except Exception as e:
+        logger.error(f"查找图片失败(Hash): {e}")
+        return None
+
+def get_image_by_url(url: str) -> Optional[Dict[str, Any]]:
+    """根据 URL 查找图片记录"""
+    try:
+        with get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute("SELECT * FROM history WHERE url = ?", (url,))
+            row = c.fetchone()
+            if row:
+                return dict(row)
+    except Exception as e:
+        logger.error(f"查找图片失败: {e}")
         return None
 
 
@@ -919,3 +1047,404 @@ def get_today_upload_count(user_id: int = None, device_id: str = None, ip_addres
     except Exception as e:
         logger.error(f"Get upload count failed: {e}")
         return 0
+
+
+# ==================== 通知系统 ====================
+
+def create_notification(user_id: int = None, device_id: str = None, 
+                        type: str = "system", title: str = None, message: str = "") -> bool:
+    """创建用户通知"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute('''INSERT INTO user_notifications (user_id, device_id, type, title, message)
+                         VALUES (?, ?, ?, ?, ?)''', (user_id, device_id, type, title, message))
+            conn.commit()
+            logger.info(f"📢 已创建通知: {title} -> user={user_id}, device={device_id}")
+            return True
+    except Exception as e:
+        logger.error(f"Create notification failed: {e}")
+        return False
+
+def get_notifications(user_id: int = None, device_id: str = None, unread_only: bool = False) -> List[Dict]:
+    """获取用户通知列表"""
+    try:
+        with get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            conditions = []
+            params = []
+            
+            if user_id:
+                conditions.append("user_id = ?")
+                params.append(user_id)
+            if device_id:
+                conditions.append("device_id = ?")
+                params.append(device_id)
+            
+            if not conditions:
+                return []
+            
+            query = "SELECT * FROM user_notifications WHERE (" + " OR ".join(conditions) + ")"
+            
+            if unread_only:
+                query += " AND is_read = 0"
+            
+            query += " ORDER BY created_at DESC LIMIT 50"
+            
+            c.execute(query, params)
+            return [dict(row) for row in c.fetchall()]
+    except Exception as e:
+        logger.error(f"Get notifications failed: {e}")
+        return []
+
+def mark_notification_read(notification_id: int) -> bool:
+    """标记通知为已读"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute("UPDATE user_notifications SET is_read = 1 WHERE id = ?", (notification_id,))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Mark notification read failed: {e}")
+        return False
+
+def cleanup_old_notifications(days: int = 7) -> int:
+    """清理超过指定天数的通知"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute('''DELETE FROM user_notifications 
+                         WHERE created_at < datetime('now', ?)''', (f'-{days} days',))
+            count = c.rowcount
+            conn.commit()
+            if count > 0:
+                logger.info(f"🧹 已清理 {count} 条过期通知")
+            return count
+    except Exception as e:
+        logger.error(f"Cleanup notifications failed: {e}")
+        return 0
+
+
+# ==================== 举报系统 ====================
+
+def create_abuse_report(image_hash: str = None, image_url: str = None, 
+                        reporter_id: int = None, reporter_device: str = None,
+                        reporter_contact: str = None, reason: str = "") -> Dict:
+    """创建侵权举报"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute('''INSERT INTO abuse_reports 
+                         (image_hash, image_url, reporter_id, reporter_device, reporter_contact, reason)
+                         VALUES (?, ?, ?, ?, ?, ?)''', 
+                      (image_hash, image_url, reporter_id, reporter_device, reporter_contact, reason))
+            conn.commit()
+            logger.warning(f"🚨 收到举报: hash={image_hash}, url={image_url}, reason={reason[:50]}")
+            return {"success": True, "id": c.lastrowid}
+    except Exception as e:
+        logger.error(f"Create abuse report failed: {e}")
+        return {"success": False, "error": str(e)}
+
+def get_abuse_reports(status: str = None, page: int = 1, page_size: int = 20) -> Dict:
+    """获取举报列表 (管理员用)"""
+    try:
+        with get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            conditions = []
+            params = []
+            
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
+            
+            where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+            
+            # 获取总数
+            c.execute(f"SELECT count(*) FROM abuse_reports{where_clause}", params)
+            total = c.fetchone()[0]
+            
+            # 获取分页数据
+            offset = (page - 1) * page_size
+            query = f"SELECT * FROM abuse_reports{where_clause} ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            params.extend([page_size, offset])
+            
+            c.execute(query, params)
+            data = [dict(row) for row in c.fetchall()]
+            
+            return {"success": True, "data": data, "total": total, "page": page}
+    except Exception as e:
+        logger.error(f"Get abuse reports failed: {e}")
+        return {"success": False, "error": str(e), "data": [], "total": 0}
+
+def resolve_abuse_report(report_id: int, admin_notes: str = "") -> bool:
+    """处理举报 (管理员用)"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute('''UPDATE abuse_reports 
+                         SET status = 'resolved', admin_notes = ?, resolved_at = CURRENT_TIMESTAMP 
+                         WHERE id = ?''', (admin_notes, report_id))
+            conn.commit()
+            logger.info(f"✅ 举报 #{report_id} 已处理")
+            return True
+    except Exception as e:
+        logger.error(f"Resolve report failed: {e}")
+        return False
+
+def get_pending_reports_count() -> int:
+    """获取待处理举报数量"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute("SELECT count(*) FROM abuse_reports WHERE status = 'pending'")
+            return c.fetchone()[0]
+    except Exception as e:
+        logger.error(f"Get pending reports count failed: {e}")
+        return 0
+
+def get_admin_stats() -> Dict[str, int]:
+    """获取管理后台统计数据"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            
+            # 1. 待处理举报
+            c.execute("SELECT COUNT(*) FROM abuse_reports WHERE status = 'pending'")
+            pending_reports = c.fetchone()[0]
+            
+            # 2. 全站图片
+            c.execute("SELECT COUNT(*) FROM history")
+            total_images = c.fetchone()[0]
+            
+            # 3. 注册用户
+            c.execute("SELECT COUNT(*) FROM users")
+            total_users = c.fetchone()[0]
+            
+            # 4. 今日上传
+            c.execute("SELECT COUNT(*) FROM history WHERE date(created_at) = date('now', 'localtime')")
+            today_uploads = c.fetchone()[0]
+            
+            return {
+                "pending_reports": pending_reports,
+                "total_images": total_images,
+                "total_users": total_users,
+                "today_uploads": today_uploads
+            }
+    except Exception as e:
+        logger.error(f"获取统计失败: {e}")
+        return {}
+
+def get_abuse_reports(page: int = 1, page_size: int = 50, status: str = None) -> Dict[str, Any]:
+    """获取举报列表 (支持分页和状态筛选)"""
+    try:
+        with get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            offset = (page - 1) * page_size
+            
+            # 关联 history 表，获取正确的 /mycloud/xxx URL
+            query = """
+                SELECT r.*, h.url as actual_image_url 
+                FROM abuse_reports r
+                LEFT JOIN history h ON r.image_hash = h.hash
+            """
+            params = []
+            
+            if status:
+                query += " WHERE r.status = ?"
+                params.append(status)
+            
+            query += " ORDER BY r.created_at DESC LIMIT ? OFFSET ?"
+            params.extend([page_size, offset])
+            
+            c.execute(query, params)
+            rows = c.fetchall()
+            
+            data = []
+            for row in rows:
+                item = dict(row)
+                # 如果有 actual_image_url (来自 history 表)，优先使用它
+                # 否则保留原始的 image_url (可能是外部链接)
+                if item.get('actual_image_url'):
+                    item['image_url'] = item['actual_image_url']
+                data.append(item)
+            
+            # 获取总数
+            count_query = "SELECT COUNT(*) FROM abuse_reports"
+            count_params = []
+            if status:
+                count_query += " WHERE status = ?"
+                count_params.append(status)
+                
+            c.execute(count_query, count_params)
+            total = c.fetchone()[0]
+            
+            return {
+                "success": True,
+                "data": data,
+                "total": total,
+                "page": page,
+                "page_size": page_size
+            }
+    except Exception as e:
+        logger.error(f"获取举报列表失败: {e}")
+        return {"success": False, "error": str(e)}
+
+def resolve_abuse_report(report_id: int, admin_notes: str = None) -> bool:
+    """标记举报为已处理"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute("""
+                UPDATE abuse_reports 
+                SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP, admin_notes = ? 
+                WHERE id = ?
+            """, (admin_notes, report_id))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error(f"处理举报失败: {e}")
+        return False
+
+def create_abuse_report(image_hash: str, image_url: str, reason: str, reporter_id: int = None, reporter_device: str = None, reporter_contact: str = None) -> Dict[str, Any]:
+    """创建举报记录"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO abuse_reports (image_hash, image_url, reason, reporter_id, reporter_device, reporter_contact)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (image_hash, image_url, reason, reporter_id, reporter_device, reporter_contact))
+            conn.commit()
+            return {"success": True, "id": c.lastrowid}
+    except Exception as e:
+        logger.error(f"创建举报失败: {e}")
+        return {"success": False, "error": str(e)}
+
+def get_notifications(user_id: int = None, device_id: str = None, unread_only: bool = False) -> List[Dict[str, Any]]:
+    """获取用户通知"""
+    try:
+        with get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            query = "SELECT * FROM user_notifications WHERE 1=1"
+            params = []
+            
+            # 用户或设备至少满足其一 (通常是 OR 关系，但这里简化为分别查)
+            # 实际上通知通常是发给特定用户或特定设备的
+            # 暂且实现为: 如果有 user_id 查 user_id, 否则查 device_id
+            if user_id:
+                query += " AND user_id = ?"
+                params.append(user_id)
+            elif device_id:
+                query += " AND device_id = ?"
+                params.append(device_id)
+            else:
+                return []
+                
+            if unread_only:
+                query += " AND is_read = 0"
+                
+            query += " ORDER BY created_at DESC LIMIT 50"
+            
+            c.execute(query, params)
+            rows = c.fetchall()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"获取通知失败: {e}")
+        return []
+
+def mark_notification_read(notification_id: int) -> bool:
+    """标记通知已读"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute("UPDATE user_notifications SET is_read = 1 WHERE id = ?", (notification_id,))
+            conn.commit()
+            return True
+    except Exception as e:
+        return False
+
+
+# ==================== 批量操作函数 ====================
+
+def batch_resolve_reports(report_ids: List[int], admin_notes: str = None) -> Dict[str, Any]:
+    """
+    批量标记多条举报为已处理
+    
+    Args:
+        report_ids: 要处理的举报 ID 列表
+        admin_notes: 处理备注（可选）
+        
+    Returns:
+        dict: {"success": True, "resolved_count": N}
+    """
+    if not report_ids:
+        return {"success": False, "error": "No IDs provided", "resolved_count": 0}
+        
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            placeholders = ','.join(['?'] * len(report_ids))
+            params = [admin_notes] + report_ids
+            c.execute(f"""
+                UPDATE abuse_reports 
+                SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP, admin_notes = ? 
+                WHERE id IN ({placeholders})
+            """, params)
+            conn.commit()
+            return {"success": True, "resolved_count": c.rowcount}
+    except Exception as e:
+        logger.error(f"批量处理举报失败: {e}")
+        return {"success": False, "error": str(e), "resolved_count": 0}
+
+
+def batch_delete_images_by_hashes(hashes: List[str]) -> Dict[str, Any]:
+    """
+    批量删除多张图片的数据库记录
+    
+    Args:
+        hashes: 要删除的图片 hash 列表
+        
+    Returns:
+        dict: {"success": True, "deleted_count": N, "failed_hashes": [...]}
+    
+    Note:
+        此函数只删除数据库记录，MinIO 文件需在调用方处理
+    """
+    if not hashes:
+        return {"success": False, "error": "No hashes provided", "deleted_count": 0}
+        
+    deleted_count = 0
+    failed_hashes = []
+    
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            for h in hashes:
+                try:
+                    c.execute("DELETE FROM history WHERE hash = ?", (h,))
+                    if c.rowcount > 0:
+                        deleted_count += 1
+                    else:
+                        failed_hashes.append(h)
+                except Exception as e:
+                    logger.error(f"删除图片 {h} 失败: {e}")
+                    failed_hashes.append(h)
+            conn.commit()
+            
+        return {
+            "success": True, 
+            "deleted_count": deleted_count,
+            "failed_hashes": failed_hashes
+        }
+    except Exception as e:
+        logger.error(f"批量删除图片失败: {e}")
+        return {"success": False, "error": str(e), "deleted_count": deleted_count}

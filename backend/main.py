@@ -154,6 +154,10 @@ app.include_router(auth.router)
 app.include_router(upload.router)
 app.include_router(user.router)
 
+# [NEW] 导入并注册管理员路由
+from .routers import admin
+app.include_router(admin.router)
+
 # [SECURITY] 添加 CORS 中间件
 # 允许来自任何源的跨域请求 (生产环境建议限制 origins)
 app.add_middleware(
@@ -229,6 +233,72 @@ async def verify_captcha_endpoint(data: dict):
         raise HTTPException(status_code=400, detail="验证码错误或已过期")
     
     return {"valid": True, "message": "验证成功"}
+
+
+# ==================== 通知 API ====================
+
+from pydantic import BaseModel
+from typing import Optional
+
+class ReportRequest(BaseModel):
+    image_hash: Optional[str] = None
+    image_url: Optional[str] = None
+    reason: str
+    contact: Optional[str] = None
+
+@app.get("/api/notifications")
+async def get_notifications_api(
+    request: Request,
+    unread: bool = False,
+    current_user: dict = Depends(get_current_user_optional)
+):
+    """获取当前用户的通知"""
+    user_id = current_user.get("id") if current_user else None
+    device_id = request.cookies.get(DEVICE_ID_COOKIE_NAME)
+    
+    if not user_id and not device_id:
+        return {"notifications": []}
+    
+    notifications = database.get_notifications(
+        user_id=user_id, 
+        device_id=device_id, 
+        unread_only=unread
+    )
+    return {"notifications": notifications}
+
+@app.post("/api/notifications/{notification_id}/read")
+async def mark_notification_read_api(
+    notification_id: int,
+    current_user: dict = Depends(get_current_user_optional)
+):
+    """标记通知为已读"""
+    success = database.mark_notification_read(notification_id)
+    return {"success": success}
+
+@app.post("/api/report")
+async def submit_report_api(
+    request: Request,
+    data: ReportRequest,
+    current_user: dict = Depends(get_current_user_optional)
+):
+    """提交侵权举报"""
+    user_id = current_user.get("id") if current_user else None
+    device_id = request.cookies.get(DEVICE_ID_COOKIE_NAME)
+    
+    result = database.create_abuse_report(
+        image_hash=data.image_hash,
+        image_url=data.image_url,
+        reporter_id=user_id,
+        reporter_device=device_id,
+        reporter_contact=data.contact,
+        reason=data.reason
+    )
+    
+    if result.get("success"):
+        return {"success": True, "message": "感谢您的举报，我们会尽快处理"}
+    else:
+        raise HTTPException(status_code=500, detail="举报提交失败")
+
 
 # ==================== 调试辅助接口 (仅限 debug_mode) ====================
 
@@ -357,6 +427,13 @@ def privacy() -> FileResponse:
 def report() -> FileResponse:
     """举报页面"""
     return FileResponse(os.path.join("frontend", "pages", "report.html"))
+
+@app.get("/admin")
+def admin_page() -> FileResponse:
+    """管理员后台页面"""
+    return FileResponse(os.path.join("frontend", "admin.html"))
+
+
 
 
 @app.get("/")

@@ -142,7 +142,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 viewModeBtn.classList.remove('active');
             }
         }
-        // 只在共享模式下显示"只看我的"筛选
+        // 只在共享模式下显示"只看我的"筛选 (后端支持 device_id 过滤)
         if (onlyMineFilter) {
             onlyMineFilter.style.display = isSharedView ? "flex" : "none";
         }
@@ -195,6 +195,17 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // ============ 工具函数 ============
+    // [Admin] 强制进入审计模式
+    window.forceAdminAuditMode = function () {
+        // 设置一个临时标记，不保存到 localStorage (刷新即失效，避免影响正常使用)
+        window.isAdminAudit = true;
+        // 强制重置页码
+        window.historyPage = 1;
+        // 刷新列表
+        loadHistory();
+        if (window.showToast) window.showToast("👁️ 上帝模式已开启：正在查看全站所有文件", "warning");
+    };
+
     // 重命名历史记录（通过URL）
     window.renameHistoryByUrl = function (url, newName) {
         // 发送请求到后端更新数据库中的filename
@@ -229,10 +240,39 @@ document.addEventListener("DOMContentLoaded", function () {
         if (keyword) {
             url += "&keyword=" + encodeURIComponent(keyword);
         }
+
+        // 处理查看模式
+        var currentMode = window.viewMode;
+
+        // [Admin] 如果处于上帝审计模式，覆盖 view_mode 参数
+        if (window.isAdminAudit) {
+            currentMode = "admin_all";
+
+            // 更新UI状态暗示处于特殊模式
+            if (viewModeBtn) {
+                viewModeBtn.classList.remove('active'); // 既不是 private 也不是 shared 的正常态
+                viewModeBtn.style.opacity = "0.5";
+                viewModeBtn.title = "当前处于上帝视角，点击退出";
+                viewModeBtn.onclick = function () {
+                    // 点击退出审计模式
+                    window.isAdminAudit = false;
+                    viewModeBtn.style.opacity = "1";
+                    viewModeBtn.title = "";
+                    // 恢复正常 toggle
+                    this.onclick = function () {
+                        // ... 原 toggle 逻辑 ...
+                        // (为了简单，直接刷新页面恢复状态最安全)
+                        location.reload();
+                    };
+                    location.reload();
+                };
+            }
+        }
+
         // 添加查看模式参数
-        url += "&view_mode=" + encodeURIComponent(window.viewMode);
+        url += "&view_mode=" + encodeURIComponent(currentMode);
         // 在共享模式下，添加"只看我的"参数
-        if (window.viewMode === "shared" && window.onlyMine) {
+        if (currentMode === "shared" && window.onlyMine) {
             url += "&only_mine=true";
         }
 
@@ -335,8 +375,58 @@ document.addEventListener("DOMContentLoaded", function () {
         img.className = "history-thumb";
         img.src = fullUrl;
         img.onerror = function () {
-            // 如果加载失败，尝试显示默认图或隐藏
-            this.style.opacity = "0.5";
+            // [FIX v2] 显示失效占位，30分钟后自动删除
+            this.onerror = null; // 防止无限递归
+            this.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNmNWY1ZjUiLz48dGV4dCB4PSI1MCIgeT0iNTAiIGZvbnQtZmFtaWx5PSJhcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPuWbvueJh+S4ouWksSE8L3RleHQ+PC9zdmc+";
+            this.style.opacity = "0.8";
+            this.style.border = "1px dashed #d32f2f";
+            this.title = "⚠️ 图片文件在存储中未找到 (404)，将在30分钟后自动清理";
+
+            // 标记卡片状态
+            card.classList.add("history-invalid");
+
+            // 显示错误提示和倒计时
+            var errorTag = document.createElement("div");
+            errorTag.innerText = "文件丢失 (30分钟后删除)";
+            errorTag.style.position = "absolute";
+            errorTag.style.bottom = "0";
+            errorTag.style.left = "0";
+            errorTag.style.width = "100%";
+            errorTag.style.background = "rgba(211, 47, 47, 0.9)";
+            errorTag.style.color = "white";
+            errorTag.style.fontSize = "10px";
+            errorTag.style.textAlign = "center";
+            errorTag.style.padding = "2px 0";
+            img.parentElement.style.position = "relative";
+            img.parentElement.appendChild(errorTag);
+
+            // 30分钟后自动删除 (1800000ms)
+            var deleteDelay = 30 * 60 * 1000;
+            var itemId = item.id; // 闭包保存 ID
+
+            setTimeout(function () {
+                var headers = { "Content-Type": "application/json" };
+                var token = localStorage.getItem("token");
+                if (token) headers["Authorization"] = "Bearer " + token;
+
+                fetch("/history/delete", {
+                    method: "POST",
+                    headers: headers,
+                    body: JSON.stringify({ ids: [itemId] })
+                }).then(function (res) {
+                    if (res.ok) {
+                        console.log("[Auto Clean] 已删除失效记录 ID:", itemId);
+                        // 从 DOM 移除卡片 (如果还在页面上)
+                        if (card.parentElement) {
+                            card.style.transition = "opacity 0.3s";
+                            card.style.opacity = "0";
+                            setTimeout(function () { card.remove(); }, 300);
+                        }
+                    }
+                }).catch(function (e) {
+                    console.warn("[Auto Clean] 删除失败:", e);
+                });
+            }, deleteDelay);
         };
 
         var infoDiv = document.createElement("div");
@@ -369,28 +459,39 @@ document.addEventListener("DOMContentLoaded", function () {
         var actions = document.createElement("div");
         actions.className = "history-actions";
 
-        var btnCopy = document.createElement("button");
-        btnCopy.className = "btn-mini";
-        btnCopy.textContent = "复制";
-        btnCopy.onclick = function (e) {
-            e.stopPropagation();
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(fullUrl);
-            } else {
-                var ta = document.createElement("textarea");
-                ta.value = fullUrl;
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand("copy");
-                document.body.removeChild(ta);
-            }
-            if (window.showToast) window.showToast("已复制", "success");
-        };
+        var btnShare = document.createElement("button");
+        btnShare.className = "btn-mini btn-primary";
+        btnShare.textContent = "获取链接";
+        btnShare.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        btnShare.style.color = 'white';
+        btnShare.style.border = 'none';
 
-        var btnOpen = document.createElement("button");
-        btnOpen.className = "btn-mini";
-        btnOpen.textContent = "打开";
-        btnOpen.onclick = function (e) { e.stopPropagation(); window.open(fullUrl, "_blank"); };
+        btnShare.onclick = function (e) {
+            e.stopPropagation();
+
+            // 构造 View URL
+            // History item 可能没有返回 hash (取决于 backend query)
+            // 检查 item 结构: item.url, item.filename, item.size, item.hash
+            var viewUrl = "";
+            if (item.hash) {
+                viewUrl = window.location.origin + "/view/" + item.hash;
+            } else {
+                // 如果没有 Hash，只能用 URL 猜测? 或者 Fallback 到 Raw URL
+                // 暂时用 fullUrl (虽然不是 landing page)
+                viewUrl = fullUrl;
+            }
+
+            var modalData = {
+                url: item.url, // Raw path /mycloud/...
+                viewUrl: viewUrl,
+                filename: item.filename,
+                size: item.size, // 传递数值，Modal 会自己格式化
+                hash: item.hash || "",
+                thumb_url: fullUrl // 列表里显示的图
+            };
+
+            window.openShareModal(modalData);
+        };
 
         var btnRename = document.createElement("button");
         btnRename.className = "btn-mini";
@@ -414,9 +515,21 @@ document.addEventListener("DOMContentLoaded", function () {
             };
         }
 
-        actions.appendChild(btnRename);
-        actions.appendChild(btnCopy);
+        actions.appendChild(btnShare);
+
+        // 打开按钮
+        var btnOpen = document.createElement("button");
+        btnOpen.className = "btn-mini";
+        btnOpen.textContent = "打开";
+        btnOpen.onclick = function (e) {
+            e.stopPropagation();
+            // 打开查看页面（如果有 hash）或直接打开原图
+            var openUrl = item.hash ? (window.location.origin + "/view/" + item.hash) : fullUrl;
+            window.open(openUrl, "_blank");
+        };
         actions.appendChild(btnOpen);
+
+        actions.appendChild(btnRename);
 
         mainRow.appendChild(img);
         mainRow.appendChild(infoDiv);

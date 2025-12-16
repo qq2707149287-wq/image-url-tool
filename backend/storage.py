@@ -121,3 +121,26 @@ def get_minio_object(object_name: str) -> dict[str, Any]:
     except Exception as e:
         logger.warning(f"❌ 读取 MyCloud 对象失败: {e}")
         raise
+
+
+def delete_from_minio(object_name: str) -> bool:
+    """
+    从 MinIO 删除对象
+    
+    Args:
+        object_name: 对象键名 (Key)
+        
+    Returns:
+        bool: 删除是否成功
+    """
+    s3 = get_s3_client()
+    if not s3:
+        logger.error("MinIO client not initialized")
+        return False
+
+    try:
+        s3.delete_object(Bucket=MINIO_BUCKET_NAME, Key=object_name)
+        return True
+    except Exception as e:
+        logger.error(f"❌ Delete from MinIO failed: {e}")
+        return False

@@ -7,8 +7,12 @@ window.lastUploadResultUrl = null;
 window.uploadSelectedHashes = new Set(); // 存储上传列表中被选中的项目 (用 hash 做 key)
 
 // ============ 上传模式状态 ============
-// 从 localStorage 读取上传模式（false=私有，true=共享）
-window.uploadSharedMode = localStorage.getItem("uploadSharedMode") === "true";
+// ============ 上传模式状态 ============
+// 根据用户需求：登录用户默认私有(false)，游客默认共享(true)
+var token = localStorage.getItem("token");
+window.uploadSharedMode = !token;
+// 更新 localStorage 以保持一致
+localStorage.setItem("uploadSharedMode", window.uploadSharedMode);
 
 // 工具: 补全URL
 function getFullUrl(url) {
@@ -197,7 +201,15 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         var name = getDefaultNameFromResult(data);
-        var displayUrl = getFullUrl(data.url);
+        var rawUrl = getFullUrl(data.url);
+        // [Commercial] 构造落地页链接 (View Link)
+        // 假设 hash 存在，使用 /view/hash；否则暂时只好用直链 (兼容旧数据)
+        var viewUrl = data.hash ? (window.location.origin + "/view/" + data.hash) : rawUrl;
+
+        // 默认显示哪个链接？
+        // 策略: 默认显示 View Link (为了广告)，但如果是 VIP (本喵无法直接判断VIP，只能默认推广告，VIP用户点击 '复制直链' 按钮)
+        // 简化: 统一显示 View Link，额外给一个 '直链(VIP)' 按钮
+        var displayUrl = viewUrl;
 
         // 复选框遮罩
         var checkOverlay = document.createElement('div');
@@ -217,10 +229,10 @@ document.addEventListener('DOMContentLoaded', function () {
         var mainRow = document.createElement('div');
         mainRow.className = 'history-main-row';
 
-        // 缩略图
+        // 缩略图 (始终用直链)
         var img = document.createElement('img');
         img.className = 'history-thumb';
-        img.src = displayUrl;
+        img.src = rawUrl;
         img.onerror = function () { this.style.opacity = "0.5"; };
 
         var infoDiv = document.createElement('div');
@@ -255,18 +267,63 @@ document.addEventListener('DOMContentLoaded', function () {
         var actions = document.createElement('div');
         actions.className = 'history-actions';
 
-        var btnCopy = document.createElement('button');
-        btnCopy.className = 'btn-mini';
-        btnCopy.innerText = '复制';
-        btnCopy.onclick = function () {
-            navigator.clipboard.writeText(displayUrl);
-            if (window.showToast) window.showToast('已复制', 'success');
+        // 兼容 HTTP 的复制函数
+        function copyToClipboard(text, successMsg) {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(function () {
+                    if (window.showToast) window.showToast(successMsg, 'success');
+                }, function (err) {
+                    fallbackCopyTextToClipboard(text, successMsg);
+                });
+            } else {
+                fallbackCopyTextToClipboard(text, successMsg);
+            }
+        }
+
+        function fallbackCopyTextToClipboard(text, successMsg) {
+            var textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";  // 避免滚动到底部
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                var successful = document.execCommand('copy');
+                if (successful && window.showToast) window.showToast(successMsg, 'success');
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+                if (window.showToast) window.showToast("复制失败，请手动复制", "error");
+            }
+            document.body.removeChild(textArea);
+        }
+
+        var btnShare = document.createElement('button');
+        btnShare.className = 'btn-mini btn-primary';
+        btnShare.innerText = '获取链接 / 分享';
+        btnShare.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        btnShare.style.color = 'white';
+        btnShare.style.border = 'none';
+        btnShare.onclick = function () {
+            // 构造传递给 Modal 的数据对象
+            // data 对象已有: url, filename, size, hash, viewUrl
+            // 还需要 thumb_url (如果是图片且已显示在列表里，我们可以获取 img.src)
+            var thumbUrl = img.src;
+            var modalData = {
+                url: data.url, // Raw URL
+                viewUrl: viewUrl, // Landing Page URL
+                filename: name,
+                size: data.size, // Pass raw size (number or string), modal formats it
+                hash: data.hash || (data.url.split('/').pop().split('.')[0]), // Fallback hash
+                thumb_url: thumbUrl
+            };
+            window.openShareModal(modalData);
         };
 
         var btnOpen = document.createElement('button');
         btnOpen.className = 'btn-mini';
         btnOpen.innerText = '打开';
-        btnOpen.onclick = function () { window.open(displayUrl); };
+        btnOpen.onclick = function () { window.open(viewUrl); };
 
         var btnRename = document.createElement('button');
         btnRename.className = 'btn-mini';
@@ -289,7 +346,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         };
 
-        actions.appendChild(btnCopy);
+        actions.appendChild(btnShare);
         actions.appendChild(btnOpen);
         actions.appendChild(btnRename);
 
@@ -420,10 +477,12 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (res.audit_logs) {
                             console.group("%c🤖 AI Content Audit Debug", "color: #00ff00; font-weight: bold; background: #222; padding: 2px 5px; border-radius: 3px;");
                             console.log("File:", file.name);
-                            if (res.audit_logs.clip) {
-                                console.table(res.audit_logs.clip);
-                            } else {
-                                console.log("Details:", res.audit_logs);
+                            console.log("Full Audit Logs:", res.audit_logs);
+                            if (res.audit_logs.chinese_clip) {
+                                console.log("🇨🇳 Chinese CLIP:", res.audit_logs.chinese_clip);
+                            }
+                            if (res.audit_logs.openai_clip) {
+                                console.log("🇺🇸 OpenAI CLIP:", res.audit_logs.openai_clip);
                             }
                             console.groupEnd();
                         }

@@ -110,12 +110,17 @@ async def get_auth_config():
 
 @router.post("/register", response_model=schemas.Token)
 async def register(request: Request, user: schemas.UserCreate):
+    # 图形验证码验证（即使是简单注册也要防机器人喵~）
+    if user.captcha_id and user.captcha_code:
+        if not captcha_utils.verify_captcha(user.captcha_id, user.captcha_code):
+            raise HTTPException(status_code=400, detail="图形验证码错误或已过期")
+    
     if database.get_user_by_username(user.username):
-        raise HTTPException(status_code=400, detail="Username already registered")
+        raise HTTPException(status_code=400, detail="用户名已被注册")
     
     hashed_password = get_password_hash(user.password)
     if not database.create_user(user.username, hashed_password):
-         raise HTTPException(status_code=500, detail="Registration failed")
+         raise HTTPException(status_code=500, detail="注册失败")
     
     # Auto login
     new_user = database.get_user_by_username(user.username)
@@ -129,7 +134,14 @@ async def register(request: Request, user: schemas.UserCreate):
         database.log_user_activity(new_user['id'], "REGISTER", request.client.host, request.headers.get("user-agent"))
         database.log_user_activity(new_user['id'], "LOGIN", request.client.host, request.headers.get("user-agent"))
 
-        return {"access_token": access_token, "token_type": "bearer", "username": user.username}
+        return {
+            "access_token": access_token, 
+            "token_type": "bearer", 
+            "username": user.username,
+            # 新注册用户默认为非VIP，非管理员
+            "is_admin": False,
+            "is_vip": False 
+        }
     else:
         raise HTTPException(status_code=500, detail="Register failed")
 
@@ -158,7 +170,13 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     
     database.log_user_activity(user['id'], "LOGIN", request.client.host, request.headers.get("user-agent"))
 
-    return {"access_token": access_token, "token_type": "bearer", "username": user['username']}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer", 
+        "username": user['username'],
+        "is_admin": bool(user.get("is_admin")),
+        "is_vip": bool(user.get("is_vip"))
+    }
 
 @router.post("/google", response_model=schemas.Token)
 async def google_login(req_obj: Request, request: schemas.GoogleLoginRequest):
@@ -305,34 +323,24 @@ async def send_verification_code(request: schemas.SendCodeRequest):
 
 @router.post("/register-email")
 async def register_email(req_obj: Request, request: schemas.EmailRegisterRequest):
-    # TODO: Pass debug_mode logic or check env. For now we strictly verify code.
-    bypass_verify = False # In new structure, assume safe by default. 
-    # If we want debug mode, we can read os.getenv("DEBUG")? Or just enforce verify.
-    
-    # [NEW] 图形验证码验证
+    # 图形验证码验证
     if request.captcha_id and request.captcha_code:
         if not captcha_utils.verify_captcha(request.captcha_id, request.captcha_code):
             raise HTTPException(status_code=400, detail="图形验证码错误或已过期")
-    elif not bypass_verify:
-        # 如果没有提供验证码参数，也需要验证（防止绕过）
-        # 但为了兼容旧版前端，暂时只有提供时才验证
-        pass
     
-    if not bypass_verify:
-        valid_code = database.get_valid_verification_code(request.email, "register")
-        if not valid_code or valid_code != request.code:
-             # Development fallback if code is empty/debug mode... 
-             # Let's keep it strict for refactor.
-             raise HTTPException(status_code=400, detail="Invalid or expired verification code")
+    # 邮件验证码验证
+    valid_code = database.get_valid_verification_code(request.email, "register")
+    if not valid_code or valid_code != request.code:
+         raise HTTPException(status_code=400, detail="邮件验证码无效或已过期")
         
     if database.get_user_by_username(request.username):
-        raise HTTPException(status_code=400, detail="Username already exists")
+        raise HTTPException(status_code=400, detail="用户名已被注册")
 
     hashed_password = get_password_hash(request.password)
     
     success = database.create_email_user(request.username, request.email, hashed_password)
     if not success:
-         raise HTTPException(status_code=400, detail="Register failed")
+         raise HTTPException(status_code=400, detail="注册失败，可能是邮箱已被使用")
     
     database.delete_verification_code(request.email, "register")
     
@@ -363,3 +371,25 @@ async def reset_password(request: schemas.ResetPasswordRequest):
     database.delete_verification_code(request.email, "reset")
         
     return {"success": True, "message": "Password reset successfully"}
+
+# [VIP] 直链签名接口
+from .. import security
+
+@router.post("/sign-url")
+async def sign_url(
+    req: schemas.SignUrlRequest, 
+    user=Depends(get_current_user)
+):
+    """
+    VIP 专属：生成带签名的直链
+    """
+    if not user.get("is_vip"):
+        raise HTTPException(status_code=403, detail="此功能仅限 VIP 用户使用")
+
+    # 默认有效期 1 年 (VIP 特权)
+    expires = int((datetime.utcnow() + timedelta(days=365)).timestamp())
+    sig = security.generate_url_signature(req.object_name, expires)
+    
+    signed_url = f"/mycloud/{req.object_name}?token={sig}&expires={expires}"
+    
+    return {"signed_url": signed_url}

@@ -145,6 +145,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 });
                 if (res.ok) {
                     var user = await res.json();
+
+                    // [FIX] 同步最新的 VIP/Admin 状态到 localStorage (修复已登录用户状态不同步问题)
+                    localStorage.setItem("is_vip", user.is_vip === true ? 'true' : 'false');
+                    localStorage.setItem("is_admin", user.is_admin === true ? 'true' : 'false');
+
                     var badge = "";
                     if (user.is_admin) {
                         badge += " <span style='background:red;color:white;padding:2px 4px;border-radius:4px;font-size:0.8em'>ADMIN</span>";
@@ -157,13 +162,29 @@ document.addEventListener("DOMContentLoaded", function () {
                     var avatarHtml = user.avatar
                         ? "<img src='" + user.avatar + "' onerror=\"this.outerHTML='👤 '\" style='width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:5px'>"
                         : "👤 ";
-                    if (authBtn) authBtn.innerHTML = avatarHtml + user.username + badge;
+                    if (authBtn) {
+                        // [Fix] 用户名过长截断处理
+                        var nameHtml = "<span style='max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;'>" + user.username + "</span>";
+                        authBtn.innerHTML = avatarHtml + nameHtml + badge;
+                        authBtn.title = user.username; // 鼠标悬停显示全名
+                    }
                     console.log("User avatar URL:", user.avatar); // Debug log
 
                     // 保存 admin 状态供其他模块使用 (如 history.js)
+                    // 保存 admin 状态供其他模块使用 (如 history.js)
                     window.currentUser = user;
+
+                    // 显示/隐藏管理员工具
+                    var adminTools = document.getElementById("adminTools");
+                    if (adminTools) {
+                        adminTools.style.display = user.is_admin ? "block" : "none";
+                    }
+
                     // 更新上传UI (因为 updateUploadUI 可能依赖 window.currentUser)
                     if (window.updateUploadUI) window.updateUploadUI();
+
+                    // [NEW] 启动通知轮询
+                    startNotificationPolling();
                 } else {
                     // Token 过期或无效
                     handleLogout();
@@ -174,7 +195,53 @@ document.addEventListener("DOMContentLoaded", function () {
         } else {
             if (authBtn) authBtn.innerText = "👤 登录/注册";
             window.currentUser = null;
+            var adminTools = document.getElementById("adminTools");
+            if (adminTools) adminTools.style.display = "none";
             if (window.updateUploadUI) window.updateUploadUI();
+        }
+    }
+
+    // 通知轮询
+    var notificationIntervalId = null;
+
+    function startNotificationPolling() {
+        // 避免重复启动
+        if (notificationIntervalId) return;
+
+        // 立即检查一次
+        checkNotifications();
+
+        // 每 30 秒检查一次
+        notificationIntervalId = setInterval(checkNotifications, 30000);
+    }
+
+    async function checkNotifications() {
+        var token = localStorage.getItem("token");
+        if (!token) return;
+
+        try {
+            var res = await fetch("/api/notifications?unread=true", {
+                headers: { "Authorization": "Bearer " + token }
+            });
+            var data = await res.json();
+
+            if (data.notifications && data.notifications.length > 0) {
+                data.notifications.forEach(function (n) {
+                    // 显示通知
+                    if (window.showToast) {
+                        var type = n.type === "moderation_reject" ? "error" : "warning";
+                        window.showToast(n.message, type);
+                    }
+
+                    // 标记为已读
+                    fetch("/api/notifications/" + n.id + "/read", {
+                        method: "POST",
+                        headers: { "Authorization": "Bearer " + token }
+                    });
+                });
+            }
+        } catch (e) {
+            console.warn("检查通知失败", e);
         }
     }
 
@@ -444,16 +511,29 @@ document.addEventListener("DOMContentLoaded", function () {
         } else if (currentAuthMode === 'register') {
             // 获取验证码输入
             var captchaCode = captchaInput ? captchaInput.value.trim() : '';
+            var skipEmailCheck = (typeof isDebugMode !== 'undefined' && isDebugMode);
 
-            endpoint = "/auth/register-email";
-            body = JSON.stringify({
-                username: user,
-                password: pass,
-                email: email,
-                code: code,
-                captcha_id: currentCaptchaId || '',
-                captcha_code: captchaCode
-            });
+            if (skipEmailCheck) {
+                // 🔧 调试模式：使用简单注册端点（只需用户名+密码+图形验证码）
+                endpoint = "/auth/register";
+                body = JSON.stringify({
+                    username: user,
+                    password: pass,
+                    captcha_id: currentCaptchaId || '',
+                    captcha_code: captchaCode
+                });
+            } else {
+                // 生产模式：使用邮箱注册端点
+                endpoint = "/auth/register-email";
+                body = JSON.stringify({
+                    username: user,
+                    password: pass,
+                    email: email,
+                    code: code,
+                    captcha_id: currentCaptchaId || '',
+                    captcha_code: captchaCode
+                });
+            }
             headers["Content-Type"] = "application/json";
         } else if (currentAuthMode === 'reset') {
             endpoint = "/auth/reset-password";
@@ -510,6 +590,9 @@ document.addEventListener("DOMContentLoaded", function () {
         username = data.username;
         localStorage.setItem("token", token);
         localStorage.setItem("username", username);
+        // [FIX] 存储 VIP 和 Admin 状态
+        localStorage.setItem("is_vip", data.is_vip === true ? 'true' : 'false');
+        localStorage.setItem("is_admin", data.is_admin === true ? 'true' : 'false');
 
         checkLoginStatus();
         authModal.style.display = "none";
@@ -520,6 +603,8 @@ document.addEventListener("DOMContentLoaded", function () {
     function handleLogout() {
         localStorage.removeItem("token");
         localStorage.removeItem("username");
+        localStorage.removeItem("is_vip");
+        localStorage.removeItem("is_admin");
         token = null;
         username = null;
         window.currentUser = null;
@@ -580,6 +665,94 @@ document.addEventListener("DOMContentLoaded", function () {
         };
     }
 
+    // [Admin] 上帝视角审计按钮
+    var adminAuditBtn = document.getElementById("adminAuditBtn");
+    if (adminAuditBtn) {
+        adminAuditBtn.onclick = function () {
+            // 1. 关闭设置模态框
+            if (document.getElementById("settingsModal")) {
+                document.getElementById("settingsModal").style.display = "none";
+            }
+            // 2. 切换到历史记录 Tab
+            var tabHistory = document.getElementById("tab-history");
+            if (tabHistory) tabHistory.click();
+
+            // 3. 强制触发 history.js 的加载逻辑 (通过某种全局变量或直接操作)
+            // 这里我们设置一个临时全局标记，history.js 会读取它
+            if (window.forceAdminAuditMode) {
+                window.forceAdminAuditMode();
+            } else {
+                alert("审计功能未就绪，请刷新页面重试");
+            }
+        };
+    }
+
+    // [Admin] 批量生成激活码按钮
+    var generateVipCodesBtn = document.getElementById("generateVipCodesBtn");
+    if (generateVipCodesBtn) {
+        generateVipCodesBtn.onclick = function () {
+            showInputModal(
+                "📥 批量生成激活码",
+                "请输入生成数量和天数:",
+                [
+                    { id: "vip_days", label: "有效期(天)", value: "30", type: "number" },
+                    { id: "vip_count", label: "生成数量(个)", value: "10", type: "number" }
+                ],
+                async (values, close) => {
+                    var days = parseInt(values.vip_days);
+                    var count = parseInt(values.vip_count);
+
+                    if (!days || days <= 0 || !count || count <= 0) {
+                        alert("请输入有效的数字");
+                        return;
+                    }
+
+                    try {
+                        // 使用 Form Data 提交，匹配后端 endpoints
+                        var formData = new FormData();
+                        formData.append("days", days);
+                        formData.append("count", count);
+
+                        var res = await fetch("/admin/vip/generate", {
+                            method: "POST",
+                            headers: {
+                                "Authorization": "Bearer " + token
+                            },
+                            body: formData
+                        });
+                        var data = await res.json();
+
+                        if (res.ok && data.success) {
+                            // 生成成功，弹窗显示结果或者下载文件
+                            var codes = data.codes;
+                            if (codes && codes.length > 0) {
+                                // 创建一个临时文本区域供复制
+                                var codeList = codes.join("\n");
+                                var blob = new Blob([codeList], { type: "text/plain;charset=utf-8" });
+                                var url = URL.createObjectURL(blob);
+                                var a = document.createElement("a");
+                                a.href = url;
+                                a.download = "vip_codes_" + Date.now() + ".txt";
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+
+                                if (window.showToast) window.showToast("成功生成 " + codes.length + " 个激活码并已自动下载", "success");
+                            }
+                            close();
+                        } else {
+                            alert(data.detail || "生成失败");
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        alert("网络错误");
+                    }
+                }
+            );
+        };
+    }
+
     // 加载用户统计信息
     async function loadUserStats() {
         if (!token) return;
@@ -603,16 +776,12 @@ document.addEventListener("DOMContentLoaded", function () {
                 // 显示统计
                 if (userStatsDisplay) {
                     var info = "已上传 " + stats.upload_count + " 张图片";
-                    // 这里的 stats 是由 loadUserStats 返回的，并不带 vip 信息
-                    // 但是 window.currentUser 里有最新的 vip 信息 (由 checkLoginStatus 更新)
-                    if (window.currentUser && window.currentUser.is_vip) {
-                        info += "<br><span style='color:#FFA500'>💎 VIP 有效期至: " + window.currentUser.vip_expiry + "</span>";
-                    }
-                    userStatsDisplay.innerHTML = info;
+                    var vipInfo = stats.is_vip ? ("VIP到期: " + stats.vip_expiry.split("T")[0]) : "普通用户";
+                    userStatsDisplay.innerHTML = `注册: ${stats.created_at.split("T")[0]} | 上传: ${stats.upload_count} | ${vipInfo}`;
                 }
             }
         } catch (e) {
-            console.error("Load user stats failed", e);
+            console.error("加载统计失败", e);
         }
     }
 
