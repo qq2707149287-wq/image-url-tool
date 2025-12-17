@@ -104,6 +104,17 @@ document.addEventListener("DOMContentLoaded", function () {
         authSubmitBtn.onclick = handleAuthSubmit;
     }
 
+    // [Fix] 添加 Enter 键支持，按回车可以直接提交喵~
+    var authPasswordInput = document.getElementById("authPassword");
+    if (authPasswordInput) {
+        authPasswordInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                handleAuthSubmit();
+            }
+        });
+    }
+
     if (logoutBtn) {
         logoutBtn.onclick = handleLogout;
     }
