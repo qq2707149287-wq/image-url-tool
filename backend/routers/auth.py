@@ -41,13 +41,18 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "YOUR_GOOGLE_CLIENT_ID")
 # Let's assume production secure defaults.
 
 # ==================== Security Utils ====================
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+# [Fix] 统一使用 bcrypt，并允许自动升级旧哈希
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        logger.error(f"❌ [Auth] 密码验证出错 (可能是哈希格式不兼容): {e}")
+        return False
 
 def get_password_hash(password):
     return pwd_context.hash(password)
