@@ -25,7 +25,11 @@ RUN pip install --no-cache-dir "torch==2.9.1" --index-url https://download.pytor
 RUN pip install --no-cache-dir "transformers==4.57.3" -i https://pypi.tuna.tsinghua.edu.cn/simple && \
   rm -rf /root/.cache /tmp/*
 
-# 2.3 安装 NudeNet
+# 2.3 安装 OpenCV (NudeNet 依赖, ~54MB)
+RUN pip install --no-cache-dir "opencv-python-headless" -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+  rm -rf /root/.cache /tmp/*
+
+# 2.4 安装 NudeNet
 RUN pip install --no-cache-dir "nudenet==3.4.2" -i https://pypi.tuna.tsinghua.edu.cn/simple && \
   rm -rf /root/.cache /tmp/*
 
