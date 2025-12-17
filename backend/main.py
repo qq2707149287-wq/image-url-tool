@@ -119,6 +119,9 @@ async def lifespan(_app: FastAPI):
     # 1. 初始化数据库（建表）
     database.init_db()
     
+    # 1.1 自动创建管理员 (如果配置了环境变量)
+    database.create_auto_admin()
+    
     # 1.5 检查关键配置
     if SECRET_KEY == "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7":
         print("\n⚠️  警告: SECRET_KEY 使用了默认值！生产环境请在 .env 文件中设置自定义值。\n")

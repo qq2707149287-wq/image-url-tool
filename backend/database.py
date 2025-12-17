@@ -1448,3 +1448,55 @@ def batch_delete_images_by_hashes(hashes: List[str]) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"批量删除图片失败: {e}")
         return {"success": False, "error": str(e), "deleted_count": deleted_count}
+
+
+def create_auto_admin() -> bool:
+    """
+    从环境变量自动创建管理员账户 (仅在应用启动时调用一次)
+    
+    环境变量:
+        AUTO_ADMIN_USERNAME: 管理员用户名
+        AUTO_ADMIN_PASSWORD: 管理员密码 (明文，会自动哈希)
+    
+    Returns:
+        bool: 是否成功创建或已存在管理员
+    """
+    from passlib.hash import bcrypt
+    
+    username = os.getenv("AUTO_ADMIN_USERNAME")
+    password = os.getenv("AUTO_ADMIN_PASSWORD")
+    
+    if not username or not password:
+        # 没有配置环境变量，跳过
+        return False
+    
+    try:
+        # 检查用户是否已存在
+        existing = get_user_by_username(username)
+        if existing:
+            # 用户已存在，确保是管理员
+            if not existing.get("is_admin"):
+                with get_db_connection() as conn:
+                    c = conn.cursor()
+                    c.execute("UPDATE users SET is_admin = 1 WHERE username = ?", (username,))
+                    conn.commit()
+                logger.info(f"✅ [Auto Admin] 已将用户 '{username}' 提升为管理员")
+            else:
+                logger.info(f"✅ [Auto Admin] 管理员 '{username}' 已存在")
+            return True
+        
+        # 创建新用户
+        password_hash = bcrypt.hash(password)
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, 1)",
+                (username, password_hash)
+            )
+            conn.commit()
+        logger.info(f"✅ [Auto Admin] 已自动创建管理员账户: {username}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ [Auto Admin] 创建管理员失败: {e}")
+        return False
