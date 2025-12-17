@@ -28,3 +28,25 @@ Thumbs.db
 # AI Agent
 .agent/
 
+# 开发/测试目录 (不需要部署)
+tests/
+scripts/
+
+# tools 目录中不需要的文件
+tools/audio_diag.py
+tools/code_monthly.txt
+tools/code_yearly.txt
+tools/email_delivery_bot.py
+tools/generate_vip.py
+tools/generate_vip_codes.py
+tools/link_preview_server.py
+tools/quick_admin.py
+tools/taobao_bot.py
+tools/taobao_delivery_bot_demo.py
+tools/更新代码.txt
+
+# 其他临时文件
+reproduce_issue.py
+debug_*.txt
+test_*.py
+*.webp
