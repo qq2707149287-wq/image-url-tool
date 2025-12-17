@@ -514,7 +514,7 @@
 
         .modal-content {
             background: var(--bg-card);
-            padding: 25px;
+            padding: 24px;
             border-radius: var(--radius-lg);
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: var(--shadow-lg);
@@ -523,6 +523,38 @@
             max-height: 80vh;
             overflow-y: auto;
             animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 16px;
+        }
+
+        .modal-header h3 {
+            font-size: 1.25rem;
+            color: var(--text-main);
+            font-weight: 700;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            transition: var(--transition);
+        }
+
+        .modal-close:hover {
+            background: var(--bg-body);
+            color: var(--danger-color);
         }
 
         @keyframes modalPop {
