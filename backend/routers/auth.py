@@ -152,15 +152,38 @@ async def register(request: Request, user: schemas.UserCreate):
 
 @router.post("/login", response_model=schemas.Token)
 async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), remember_me: bool = True):
-    user = database.get_user_by_username(form_data.username)
-    if not user:
-        user = database.get_user_by_email(form_data.username)
-    
-    if not user or not verify_password(form_data.password, user['password_hash']):
+    try:
+        logger.info(f"👉 [Auth] 尝试登录: {form_data.username}")
+        user = database.get_user_by_username(form_data.username)
+        if not user:
+            user = database.get_user_by_email(form_data.username)
+        
+        # 详细的密码验证日志
+        verification_result = False
+        if user:
+            try:
+                verification_result = verify_password(form_data.password, user['password_hash'])
+            except Exception as ve:
+                logger.error(f"❌ [Auth] verify_password 内部报错: {ve}")
+                verification_result = False
+        
+        if not user or not verification_result:
+            logger.warning(f"❌ [Auth] 登录失败: 用户名或密码错误 (User found: {bool(user)})")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ [Auth] 登录接口发生未知异常: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        # 返回 400 而不是 500，避免前端 SyntaxError，同时给出错误提示
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=400,
+            detail=f"Login Error: {str(e)}"
         )
     
     expires_minutes = ACCESS_TOKEN_EXPIRE_MINUTES if remember_me else 60 * 24
