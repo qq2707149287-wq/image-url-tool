@@ -1461,7 +1461,9 @@ def create_auto_admin() -> bool:
     Returns:
         bool: 是否成功创建或已存在管理员
     """
-    from passlib.hash import bcrypt
+    # [Fix] 使用 passlib.context 代替直接使用 bcrypt，解决版本兼容性问题
+    from passlib.context import CryptContext
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     
     username = os.getenv("AUTO_ADMIN_USERNAME")
     password = os.getenv("AUTO_ADMIN_PASSWORD")
@@ -1486,7 +1488,7 @@ def create_auto_admin() -> bool:
             return True
         
         # 创建新用户
-        password_hash = bcrypt.hash(password)
+        password_hash = pwd_context.hash(password)
         with get_db_connection() as conn:
             c = conn.cursor()
             c.execute(
