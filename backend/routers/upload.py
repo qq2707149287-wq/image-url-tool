@@ -27,7 +27,7 @@ def get_debug_mode():
     except ImportError:
         return False
 
-# Setup Logger
+# 设置日志记录器
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -38,7 +38,7 @@ ALLOWED_EXTENSIONS = config.ALLOWED_EXTENSIONS
 CACHE_MAX_AGE = config.CACHE_MAX_AGE
 MIME_TYPE_MAP = config.MIME_TYPE_MAP
 
-# Setup Templates
+# 设置模板引擎
 templates = Jinja2Templates(directory="frontend")
 
 # ==================== 工具函数 ====================
@@ -330,7 +330,7 @@ async def view_image_page(request: Request, image_identifier: str):
 
             item = dict(row)
             
-            # Format size
+            # 格式化文件大小
             size_bytes = item.get("size", 0)
             if size_bytes < 1024:
                 size_str = f"{size_bytes} B"

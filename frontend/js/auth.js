@@ -1229,4 +1229,11 @@ document.addEventListener("DOMContentLoaded", function () {
             alert("网络错误");
         }
     };
+
+    // ==================== 暴露共享函数到 window 对象 ====================
+    // 🔧 让拆分后的模块可以调用这些函数喵~
+    window.checkLoginStatus = checkLoginStatus;
+    window.handleLogout = handleLogout;
+    window.showInputModal = showInputModal;
+    window.updateModalUI = updateModalUI;
 });

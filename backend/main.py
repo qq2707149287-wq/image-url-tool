@@ -35,8 +35,8 @@ from . import email_utils # 邮件发送工具
 from . import audit      # [NEW] 图片内容审计
 from . import captcha_utils  # [NEW] 验证码工具
 
-# Auth imports
-# Auth imports
+# 认证相关导入
+# 认证相关导入
 from fastapi import Depends, status, Response, Request
 # CORS
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,7 +51,7 @@ from .config import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 
-# System Settings (In-memory)
+# 系统设置 (内存中存储)
 from .global_state import SYSTEM_SETTINGS
 
 # [Refactor] Auth Config moved to config.py

@@ -19,20 +19,21 @@ from ..config import (
     SECRET_KEY, 
     JWT_ALGORITHM as ALGORITHM, 
     ACCESS_TOKEN_EXPIRE_MINUTES,
-    GOOGLE_CLIENT_ID
+    GOOGLE_CLIENT_ID,
+    BCRYPT_ROUNDS
 )
 
-# Setup Logger
+# 设置日志记录器
 logger = logging.getLogger(__name__)
 
-# ==================== Security Utils ====================
+# ==================== 安全工具函数 ====================
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 def verify_password(plain_password, hashed_password):
     try:
-        # bcrypt works with bytes
+        # bcrypt 需要 bytes 类型参数
         if isinstance(hashed_password, str):
             hashed_password = hashed_password.encode('utf-8')
         if isinstance(plain_password, str):
@@ -46,7 +47,7 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     if isinstance(password, str):
         password = password.encode('utf-8')
-    salt = bcrypt.gensalt()
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
     return bcrypt.hashpw(password, salt).decode('utf-8')
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -61,7 +62,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 async def get_current_user_optional(token: str = Depends(oauth2_scheme)):
     """
-    Get current user if token is present and valid, else None.
+    获取当前用户（如果 token 有效），否则返回 None。
     """
     if not token:
         return None
@@ -71,7 +72,7 @@ async def get_current_user_optional(token: str = Depends(oauth2_scheme)):
         if username is None:
             return None
             
-        # Validate Session ID if present
+        # 如果存在 Session ID，验证其有效性
         sid = payload.get("sid")
         if sid:
             if not database.validate_session(sid):
@@ -85,7 +86,7 @@ async def get_current_user_optional(token: str = Depends(oauth2_scheme)):
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     """
-    Enforce auth.
+    强制认证：如果用户未登录则抛出 401 异常。
     """
     user = await get_current_user_optional(token)
     if not user:
@@ -96,7 +97,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         )
     return user
 
-# ==================== Routes ====================
+# ==================== 路由接口 ====================
 
 @router.get("/config")
 async def get_auth_config():
@@ -107,6 +108,15 @@ async def get_auth_config():
 
 @router.post("/register", response_model=schemas.Token)
 async def register(request: Request, user: schemas.UserCreate):
+    """
+    用户注册接口
+    
+    功能:
+    - 验证图形验证码 (captcha)
+    - 验证用户名唯一性
+    - 创建新用户
+    - 自动登录并返回 Access Token
+    """
     # 图形验证码验证（即使是简单注册也要防机器人喵~）
     from ..global_state import SYSTEM_SETTINGS
     
@@ -127,7 +137,7 @@ async def register(request: Request, user: schemas.UserCreate):
     if not database.create_user(user.username, hashed_password):
          raise HTTPException(status_code=500, detail="注册失败")
     
-    # Auto login
+    # 自动登录
     new_user = database.get_user_by_username(user.username)
     if new_user:
         sid = database.create_session(new_user['id'], request.headers.get("user-agent"), request.client.host)
@@ -135,7 +145,7 @@ async def register(request: Request, user: schemas.UserCreate):
         access_token = create_access_token(
             data={"sub": user.username, "sid": sid}, expires_delta=access_token_expires
         )
-        # Log Activity
+        # 记录用户活动
         database.log_user_activity(new_user['id'], "REGISTER", request.client.host, request.headers.get("user-agent"))
         database.log_user_activity(new_user['id'], "LOGIN", request.client.host, request.headers.get("user-agent"))
 
@@ -152,6 +162,16 @@ async def register(request: Request, user: schemas.UserCreate):
 
 @router.post("/login", response_model=schemas.Token)
 async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), remember_me: bool = True):
+    """
+    用户登录接口 (OAuth2 兼容)
+    
+    Args:
+        form_data: 包含 username 和 password
+        remember_me: 是否记住登录 (默认 30 天，否则 24 小时)
+        
+    Returns:
+        JSON: 包含 access_token 和用户信息
+    """
     try:
         logger.info(f"👉 [Auth] 尝试登录: {form_data.username}")
         user = database.get_user_by_username(form_data.username)
@@ -189,7 +209,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     expires_minutes = ACCESS_TOKEN_EXPIRE_MINUTES if remember_me else 60 * 24
     access_token_expires = timedelta(minutes=expires_minutes)
 
-    # Create Session
+    # 创建会话
     sid = database.create_session(user['id'], request.headers.get("user-agent"), request.client.host)
 
     access_token = create_access_token(
@@ -208,6 +228,12 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
 
 @router.post("/google", response_model=schemas.Token)
 async def google_login(req_obj: Request, request: schemas.GoogleLoginRequest):
+    """
+    Google 登录接口 (Popup 模式)
+    
+    接收前端 Google Sign-In 返回的 id_token，验证并登录/注册用户。
+    如果用户不存在，将自动创建新账号。
+    """
     token = request.token
     try:
         id_info = id_token.verify_oauth2_token(
@@ -261,7 +287,12 @@ from fastapi import Form
 
 @router.post("/google-callback", response_class=HTMLResponse)
 async def google_callback(req_obj: Request, credential: str = Form(...), g_csrf_token: str = Form(None)):
-    """处理 Google Sign-In redirect 模式的回调"""
+    """
+    Google 登录回调接口 (Redirect 模式)
+    
+    当配置 ux_mode: 'redirect' 时，Google 会 POST credential 到此接口。
+    验证成功后返回一个自动跳转的 HTML 页面，将 Token 写入 localStorage。
+    """
     # 注意: g_csrf_token 是 Google 自动发送的，我们需要接收它但不需要验证（验证由 credential 本身完成）
     try:
         id_info = id_token.verify_oauth2_token(
@@ -318,6 +349,13 @@ async def google_callback(req_obj: Request, credential: str = Form(...), g_csrf_
 
 @router.post("/send-code")
 async def send_verification_code(request: schemas.SendCodeRequest):
+    """
+    发送邮箱验证码 API
+    
+    支持两种类型:
+    - register: 注册验证码 (检查邮箱是否已注册)
+    - reset: 重置密码验证码 (检查邮箱是否存在)
+    """
     email = request.email
     code_type = request.type
     
@@ -351,6 +389,13 @@ async def send_verification_code(request: schemas.SendCodeRequest):
 
 @router.post("/register-email")
 async def register_email(req_obj: Request, request: schemas.EmailRegisterRequest):
+    """
+    邮箱注册接口
+    
+    包含双重验证:
+    1. 图形验证码 (Captcha)
+    2. 邮箱验证码 (Email Code)
+    """
     # 图形验证码验证
     from ..global_state import SYSTEM_SETTINGS
     
@@ -396,6 +441,11 @@ async def register_email(req_obj: Request, request: schemas.EmailRegisterRequest
 
 @router.post("/reset-password")
 async def reset_password(request: schemas.ResetPasswordRequest):
+    """
+    重置密码接口
+    
+    验证邮箱验证码并设置新密码
+    """
     valid_code = database.get_valid_verification_code(request.email, "reset")
     if not valid_code or valid_code != request.code:
         raise HTTPException(status_code=400, detail="Invalid verification code")

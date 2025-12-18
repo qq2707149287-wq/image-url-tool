@@ -25,7 +25,11 @@ JWT_ALGORITHM = "HS256"
 # Token 过期时间（分钟）: 30天
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 
-# Google OAuth
+# Bcrypt 加盐轮数 (越高越安全，但越慢)
+# 推荐值: 10-12 之间，12 是一个较好的平衡点
+BCRYPT_ROUNDS = 12
+
+# 谷歌 OAuth 配置
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 # ==================== 上传限额配置 ====================
