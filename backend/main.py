@@ -5,6 +5,7 @@ import mimetypes # 用于猜测文件的MIME类型（如 .jpg -> image/jpeg）
 import logging # 日志库，用于输出运行时的信息（Info, Error等）
 import uuid    # 用于生成唯一的ID（通用唯一识别码）
 from io import BytesIO # 在内存中处理二进制数据，像操作文件一样操作内存中的数据
+from datetime import datetime, timedelta  # 日期时间处理
 from contextlib import asynccontextmanager # 用于创建异步上下文管理器（比如在应用启动和关闭时执行代码）
 
 # FastAPI 相关导入
@@ -41,31 +42,19 @@ from fastapi import Depends, status, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 # [Refactor] Import Auth Router and Dependencies
-from .routers import auth
-from .routers.auth import get_current_user, get_current_user_optional, SECRET_KEY, GOOGLE_CLIENT_ID
-
-# ==================== 配置常量 ====================
-
-# 服务器配置
-DEFAULT_PORT = 8000
-DEFAULT_HOST = "0.0.0.0" # 0.0.0.0 表示允许任何IP访问
-
-# 文件上传限制
-from .routers import upload
-from .routers import user
-
-# Cookie 配置
-# Cookie 配置
-DEVICE_ID_COOKIE_NAME = "device_id" # Cookie的名称
-DEVICE_ID_COOKIE_MAX_AGE = 365 * 24 * 60 * 60  # Cookie有效期1年
+from .routers import auth, upload, user
+from .routers.auth import get_current_user, get_current_user_optional, get_password_hash, create_access_token
+from .config import (
+    SECRET_KEY, GOOGLE_CLIENT_ID, 
+    DEFAULT_PORT, DEFAULT_HOST,
+    DEVICE_ID_COOKIE_NAME, DEVICE_ID_COOKIE_MAX_AGE,
+    ACCESS_TOKEN_EXPIRE_MINUTES
+)
 
 # System Settings (In-memory)
-SYSTEM_SETTINGS = {"debug_mode": False}
+from .global_state import SYSTEM_SETTINGS
 
-# Auth Configuration
-load_dotenv() # Load env vars before using them
-
-# [Refactor] Auth Config moved to routers.auth
+# [Refactor] Auth Config moved to config.py
 
 # ==================== 初始化 ====================
 
@@ -123,9 +112,9 @@ async def lifespan(_app: FastAPI):
     database.create_auto_admin()
     
     # 1.5 检查关键配置
-    if SECRET_KEY == "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7":
-        print("\n⚠️  警告: SECRET_KEY 使用了默认值！生产环境请在 .env 文件中设置自定义值。\n")
-    if GOOGLE_CLIENT_ID == "YOUR_GOOGLE_CLIENT_ID":
+    if not SECRET_KEY or SECRET_KEY == "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7":
+        print("\n⚠️  警告: SECRET_KEY 未配置或使用了默认值！生产环境请在 .env 文件中设置自定义值。\n")
+    if not GOOGLE_CLIENT_ID:
         print("⚠️  提示: GOOGLE_CLIENT_ID 未配置，Google 登录功能将不可用。\n")
     
     # 2. 获取本机IP，打印启动提示
@@ -193,7 +182,6 @@ async def get_system_settings():
 @app.post("/system/settings")
 async def update_system_settings(settings: dict):
     """更新系统设置"""
-    global SYSTEM_SETTINGS
     if "debug_mode" in settings:
         SYSTEM_SETTINGS["debug_mode"] = bool(settings["debug_mode"])
         logger.info(f"Debug Mode set to: {SYSTEM_SETTINGS['debug_mode']}")

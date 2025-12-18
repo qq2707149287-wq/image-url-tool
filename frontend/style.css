@@ -596,3 +596,61 @@ body {
 #shareMdGuestTip a:hover {
     text-decoration: underline;
 }
+
+/* ==================== 页脚样式 ==================== */
+.site-footer {
+    margin-top: 40px;
+    padding: 20px 0;
+    text-align: center;
+}
+
+.footer-content {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.footer-links {
+    margin-bottom: 10px;
+}
+
+.footer-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 13px;
+    transition: color 0.2s;
+}
+
+.footer-links a:hover {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.footer-links .divider {
+    color: var(--border-color);
+    margin: 0 10px;
+    font-size: 13px;
+}
+
+.copyright {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin: 0;
+    opacity: 0.8;
+}
+
+/* 深色模式下的页脚 */
+[data-theme="dark"] .footer-links a {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .footer-links a:hover {
+    color: var(--primary-color);
+}
+
+/* ==================== 调试模式样式 ==================== */
+/* 🔧 调试模式下隐藏注册表单中的验证码和邮箱相关字段 */
+body.debug-mode #captchaGroup,
+body.debug-mode #emailGroup,
+body.debug-mode #codeGroup {
+    display: none !important;
+}

@@ -61,6 +61,9 @@ document.addEventListener("DOMContentLoaded", function () {
     var token = localStorage.getItem("token");
     var username = localStorage.getItem("username");
 
+    // 🔧 调试模式状态 (提前声明，确保 updateModalUI 能访问喵~)
+    var isDebugMode = false;
+
     // Init State
     checkLoginStatus();
 
@@ -356,8 +359,17 @@ document.addEventListener("DOMContentLoaded", function () {
             if (authUsernameInput) authUsernameInput.parentNode.style.display = "block";
             if (authPasswordInput) authPasswordInput.parentNode.parentNode.style.display = "block";
             if (rememberMeGroup) rememberMeGroup.style.display = "none";
-            if (captchaGroup) captchaGroup.style.display = "block";  // 注册显示验证码
-            loadCaptcha();  // 加载验证码图片
+
+            // 🔧 调试模式下隐藏验证码和邮箱验证喵~
+            var skipEmailCheck = (typeof isDebugMode !== 'undefined' && isDebugMode);
+            if (skipEmailCheck) {
+                if (captchaGroup) captchaGroup.style.display = "none";
+                if (emailGroup) emailGroup.style.display = "none";
+                if (codeGroup) codeGroup.style.display = "none";
+            } else {
+                if (captchaGroup) captchaGroup.style.display = "block";
+                loadCaptcha();  // 加载验证码图片
+            }
 
             if (googleBtn) googleBtn.style.display = "none";
 
@@ -960,7 +972,7 @@ document.addEventListener("DOMContentLoaded", function () {
     var settingsBtn = document.getElementById("settingsBtn");
     var settingsModal = document.getElementById("settingsModal");
     var debugModeToggle = document.getElementById("debugModeToggle");
-    var isDebugMode = false;
+    // isDebugMode 已在文件开头声明，这里不再重复
 
     // Load settings on start
     loadSystemSettings();
@@ -972,6 +984,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 var settings = await res.json();
                 isDebugMode = settings.debug_mode || false;
                 if (debugModeToggle) debugModeToggle.checked = isDebugMode;
+                // 🔧 CSS 大法：同步更新 body 的 class 喵~
+                document.body.classList.toggle('debug-mode', isDebugMode);
                 console.log("Debug Mode:", isDebugMode);
             }
         } catch (e) {
@@ -1005,6 +1019,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (debugModeToggle) {
         debugModeToggle.onchange = async function () {
             var newValue = this.checked;
+            // 🔧 立即更新 UI，不等后端返回，防止视觉延迟
+            document.body.classList.toggle('debug-mode', newValue);
+
             try {
                 var res = await fetch("/system/settings", {
                     method: "POST",
@@ -1014,6 +1031,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (res.ok) {
                     var data = await res.json();
                     isDebugMode = data.debug_mode;
+                    // 再次确认状态 (防回滚)
+                    document.body.classList.toggle('debug-mode', isDebugMode);
                     if (window.showToast) window.showToast("调试模式已" + (isDebugMode ? "开启" : "关闭"), "success");
                     // Refresh UI if register modal is open
                     updateModalUI();
@@ -1044,11 +1063,17 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (codeGroup) codeGroup.style.display = "none";
                 if (emailInput) emailInput.removeAttribute("required");
                 if (codeInput) codeInput.removeAttribute("required");
+                // 🔧 验证码也要隐藏喵~
+                var captchaGroup = document.getElementById("captchaGroup");
+                if (captchaGroup) captchaGroup.style.display = "none";
             } else {
                 if (emailGroup) emailGroup.style.display = "block";
                 if (codeGroup) codeGroup.style.display = "block";
                 if (emailInput) emailInput.setAttribute("required", "true");
                 if (codeInput) codeInput.setAttribute("required", "true");
+                // 生产模式显示验证码
+                var captchaGroup = document.getElementById("captchaGroup");
+                if (captchaGroup) captchaGroup.style.display = "block";
             }
         }
     };

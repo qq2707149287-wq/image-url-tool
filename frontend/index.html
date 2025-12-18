@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>私有云图床工具</title>
-    <link rel="stylesheet" href="/static/style.css?v=1.7">
+    <link rel="stylesheet" href="/static/style.css?v=1.9">
 </head>
 
 <body>
@@ -195,14 +195,17 @@
                     <!-- 图形验证码 (注册) -->
                     <div class="form-group" id="captchaGroup" style="display:none; margin-bottom: 15px;">
                         <label style="display:block; margin-bottom: 5px; font-size: 14px;">图形验证码</label>
-                        <div style="display:flex; align-items:center; gap:10px;">
+                        <div style="position:relative; display:flex; align-items:center; gap:10px;">
                             <img id="captchaImage" src="" alt="验证码"
                                 style="height:40px; border-radius:4px; cursor:pointer; border:1px solid var(--border-color);"
                                 title="点击刷新验证码">
-                            <input type="text" id="captchaInput" class="input-text" style="flex:1; padding: 8px;"
-                                placeholder="请输入图中字符" maxlength="4">
-                            <button type="button" id="refreshCaptchaBtn" class="btn-ghost"
-                                style="padding:4px 8px; font-size:12px;">刷新</button>
+                            <div style="position:relative; flex:1;">
+                                <input type="text" id="captchaInput" class="input-text"
+                                    style="width:100%; padding: 8px 40px 8px 8px;" placeholder="图中字符" maxlength="4">
+                                <button type="button" id="refreshCaptchaBtn" class="btn-ghost"
+                                    style="position:absolute; right:2px; top:50%; transform:translateY(-50%); padding:0; width:30px; height:30px; font-size:18px; display:flex; align-items:center; justify-content:center; border:none;"
+                                    title="刷新验证码">↻</button>
+                            </div>
                         </div>
                     </div>
 

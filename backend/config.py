@@ -2,9 +2,31 @@
 # 将硬编码的"魔法数字"移到这里，便于维护和修改
 
 import os
+import random
+import string
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+# ==================== 安全配置 ====================
+# [SECURITY] SECRET_KEY 用于 JWT 签名和其他加密操作
+# 生产环境必须在 .env 中设置此值！
+_secret_key = os.getenv("SECRET_KEY")
+if not _secret_key:
+    logger.warning("⚠️ [Config] 未配置 SECRET_KEY! 使用随机生成的临时密钥。")
+    _secret_key = "".join(random.choices(string.ascii_letters + string.digits, k=64))
+SECRET_KEY = _secret_key
+
+# JWT 算法
+JWT_ALGORITHM = "HS256"
+
+# Token 过期时间（分钟）: 30天
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
+
+# Google OAuth
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 # ==================== 上传限额配置 ====================
 # 每日上传限额（张/天）
@@ -48,3 +70,27 @@ MIME_TYPE_MAP = {
 # ==================== AI 审核配置 ====================
 # 低内存服务器设为 true 以禁用 AI 审核 (节省 ~2GB 内存)
 DISABLE_AI_AUDIT = os.getenv("DISABLE_AI_AUDIT", "false").lower() == "true"
+
+# ==================== 数据库配置 ====================
+# 数据目录（Docker 部署时挂载到 /app/data）
+DATA_DIR = os.getenv("DATA_DIR")
+
+# ==================== 调试模式 ====================
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+
+
+# ==================== 数据库配置扩展 ====================
+# [Refactor] 将 DB_PATH 逻辑集中到这里
+if DATA_DIR:
+    # 确保目录存在
+    os.makedirs(DATA_DIR, exist_ok=True)
+    DB_PATH = os.path.join(DATA_DIR, "history.db")
+else:
+    # 默认为项目根目录下的 history.db
+    # 注意：这里我们假设 config.py 在 backend/ 目录下，项目根目录是 backend/ 的上一级
+    # backend/config.py -> backend/ -> project_root/
+    _current_dir = os.path.dirname(os.path.abspath(__file__))
+    _project_root = os.path.dirname(_current_dir)
+    DB_PATH = os.path.join(_project_root, "history.db")
+
+

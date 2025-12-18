@@ -33,7 +33,7 @@ async def get_reports(
     current_user: dict = Depends(get_current_admin)
 ):
     """获取举报列表"""
-    return database.get_abuse_reports(page, page_size, status)
+    return database.get_abuse_reports(status=status, page=page, page_size=page_size)
 
 @router.post("/reports/{report_id}/resolve")
 async def resolve_report(

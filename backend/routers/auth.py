@@ -1,6 +1,4 @@
 import os
-import random
-import string
 import logging
 import uuid
 from datetime import datetime, timedelta
@@ -8,54 +6,48 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from passlib.context import CryptContext
+import bcrypt
 from jose import JWTError, jwt
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-from dotenv import load_dotenv
 
 from .. import database
 from .. import schemas
 from .. import email_utils
 from .. import captcha_utils  # 验证码工具
+from ..config import (
+    SECRET_KEY, 
+    JWT_ALGORITHM as ALGORITHM, 
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    GOOGLE_CLIENT_ID
+)
 
 # Setup Logger
 logger = logging.getLogger(__name__)
 
-# Load Env
-load_dotenv()
-
-# ==================== 配置常量 ====================
-# [SECURITY] 强制要求 SECRET_KEY
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY:
-    logger.warning("⚠️ [Auth] 未配置 SECRET_KEY! 使用随机生成的临时密钥。")
-    SECRET_KEY = "".join(random.choices(string.ascii_letters + string.digits, k=64))
-
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30 # 30 Days
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "YOUR_GOOGLE_CLIENT_ID")
-# Debug Mode (Lazy load from main or database? For simplicity, assume False or check env)
-# We can't easily import SYSTEM_SETTINGS from main to avoid circular import.
-# For now, we'll check env var or database setting if needed, or pass it in context.
-# Let's assume production secure defaults.
-
 # ==================== Security Utils ====================
-# [Fix] 统一使用 bcrypt，并允许自动升级旧哈希
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 def verify_password(plain_password, hashed_password):
     try:
-        return pwd_context.verify(plain_password, hashed_password)
+        # bcrypt works with bytes
+        if isinstance(hashed_password, str):
+            hashed_password = hashed_password.encode('utf-8')
+        if isinstance(plain_password, str):
+            plain_password = plain_password.encode('utf-8')
+            
+        return bcrypt.checkpw(plain_password, hashed_password)
     except Exception as e:
-        logger.error(f"❌ [Auth] 密码验证出错 (可能是哈希格式不兼容): {e}")
+        logger.error(f"❌ [Auth] 密码验证出错: {e}")
         return False
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    if isinstance(password, str):
+        password = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password, salt).decode('utf-8')
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -110,15 +102,23 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 async def get_auth_config():
     """返回公开认证配置"""
     return {
-        "google_client_id": GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID != "YOUR_GOOGLE_CLIENT_ID" else None
+        "google_client_id": GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID else None
     }
 
 @router.post("/register", response_model=schemas.Token)
 async def register(request: Request, user: schemas.UserCreate):
     # 图形验证码验证（即使是简单注册也要防机器人喵~）
-    if user.captcha_id and user.captcha_code:
-        if not captcha_utils.verify_captcha(user.captcha_id, user.captcha_code):
-            raise HTTPException(status_code=400, detail="图形验证码错误或已过期")
+    from ..global_state import SYSTEM_SETTINGS
+    
+    bypass = False
+    if SYSTEM_SETTINGS.get("debug_mode") and user.captcha_code == "abcd":
+        bypass = True
+        logger.info(f"🔧 [Debug] Skipping Captcha for user: {user.username}")
+        
+    if not bypass:
+        if user.captcha_id and user.captcha_code:
+            if not captcha_utils.verify_captcha(user.captcha_id, user.captcha_code):
+                raise HTTPException(status_code=400, detail="图形验证码错误或已过期")
     
     if database.get_user_by_username(user.username):
         raise HTTPException(status_code=400, detail="用户名已被注册")
@@ -213,7 +213,7 @@ async def google_login(req_obj: Request, request: schemas.GoogleLoginRequest):
         id_info = id_token.verify_oauth2_token(
             token, 
             google_requests.Request(), 
-            GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID != "YOUR_GOOGLE_CLIENT_ID" else None,
+            GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID else None,
             clock_skew_in_seconds=10
         )
         google_id = id_info['sub']
@@ -267,7 +267,7 @@ async def google_callback(req_obj: Request, credential: str = Form(...), g_csrf_
         id_info = id_token.verify_oauth2_token(
             credential, 
             google_requests.Request(), 
-            GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID != "YOUR_GOOGLE_CLIENT_ID" else None,
+            GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID else None,
             clock_skew_in_seconds=10
         )
         google_id = id_info['sub']
@@ -352,9 +352,17 @@ async def send_verification_code(request: schemas.SendCodeRequest):
 @router.post("/register-email")
 async def register_email(req_obj: Request, request: schemas.EmailRegisterRequest):
     # 图形验证码验证
-    if request.captcha_id and request.captcha_code:
-        if not captcha_utils.verify_captcha(request.captcha_id, request.captcha_code):
-            raise HTTPException(status_code=400, detail="图形验证码错误或已过期")
+    from ..global_state import SYSTEM_SETTINGS
+    
+    bypass = False
+    if SYSTEM_SETTINGS.get("debug_mode") and request.captcha_code == "abcd":
+        bypass = True
+        logger.info(f"🔧 [Debug] Skipping Captcha for email register: {request.username}")
+        
+    if not bypass:
+        if request.captcha_id and request.captcha_code:
+            if not captcha_utils.verify_captcha(request.captcha_id, request.captcha_code):
+                raise HTTPException(status_code=400, detail="图形验证码错误或已过期")
     
     # 邮件验证码验证
     valid_code = database.get_valid_verification_code(request.email, "register")
