@@ -50,3 +50,9 @@ reproduce_issue.py
 debug_*.txt
 test_*.py
 *.webp
+
+# 本地开发调试文件
+.augment/
+check_*.py
+inspect_*.py
+tools/reset_admin_password.py
