@@ -12,28 +12,8 @@ document.addEventListener("DOMContentLoaded", function () {
     var sessionsModalCloseBtn = document.getElementById("sessionsModalCloseBtn");
 
     // ==================== 工具函数 ====================
-    /**
-     * 获取当前 token
-     */
-    function getToken() {
-        return localStorage.getItem("token");
-    }
-
-    /**
-     * 解析 JWT Token 获取 payload
-     */
-    function parseJwt(token) {
-        try {
-            var base64Url = token.split('.')[1];
-            var base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            var jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
-            return JSON.parse(jsonPayload);
-        } catch (e) {
-            return {};
-        }
-    }
+    // ==================== 工具函数 ====================
+    // 🔧 已统一移动到 core.js
 
     /**
      * 解析 User-Agent 获取设备名称

@@ -137,6 +137,43 @@ async def batch_delete_images(
     return result
 
 
+@router.post("/vip/generate")
+async def generate_vip_codes(
+    data: schemas.GenerateVipCodesRequest,
+    current_user: dict = Depends(get_current_admin)
+):
+    """批量生成 VIP 激活码"""
+    import random
+    import string
+    
+    generated_codes = []
+    failed_count = 0
+    
+    # 限制单次生成数量，防止滥用
+    count = min(data.count, 100)
+    
+    for _ in range(count):
+        # 生成 16 位随机码 (大写字母+数字)
+        files = ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
+        # 格式化为 XXXX-XXXX-XXXX-XXXX
+        code = f"{files[:4]}-{files[4:8]}-{files[8:12]}-{files[12:]}"
+        
+        # 尝试插入数据库
+        if database.create_vip_code(code, data.days):
+            generated_codes.append(code)
+        else:
+            failed_count += 1
+            
+    return {
+        "success": True,
+        "count": len(generated_codes),
+        "failed": failed_count,
+        "codes": generated_codes,
+        "days": data.days
+    }
+
+
+
 # ==================== 用户管理接口 (Stage 5) ====================
 
 @router.get("/users")

@@ -435,7 +435,12 @@ def report() -> FileResponse:
 @app.get("/admin")
 def admin_page() -> FileResponse:
     """管理员后台页面"""
-    return FileResponse(os.path.join("frontend", "admin.html"))
+    response = FileResponse(os.path.join("frontend", "admin.html"))
+    # [Fix] 禁止缓存，确保前端更新立即生效
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 

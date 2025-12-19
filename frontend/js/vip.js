@@ -11,26 +11,8 @@ document.addEventListener("DOMContentLoaded", function () {
     var adminAuditBtn = document.getElementById("adminAuditBtn");
 
     // ==================== 工具函数 ====================
-    function getToken() {
-        return localStorage.getItem("token");
-    }
+    // 🔧 已统一移动到 core.js 和 ui.js
 
-    /**
-     * 通用输入弹窗 (尝试使用全局定义的，如果没有则降级)
-     */
-    function showInputModal(title, message, inputs, callback) {
-        if (typeof window.showInputModal === 'function') {
-            window.showInputModal(title, message, inputs, callback);
-        } else {
-            // 降级实现
-            var values = {};
-            inputs.forEach(function (input) {
-                var value = prompt(message + "\n" + (input.label || input.placeholder));
-                values[input.id] = value;
-            });
-            if (callback) callback(values, function () { });
-        }
-    }
 
     // ==================== VIP 激活 (用户功能) ====================
     if (activateVipBtn) {
@@ -98,16 +80,17 @@ document.addEventListener("DOMContentLoaded", function () {
                     }
 
                     try {
-                        var formData = new FormData();
-                        formData.append("days", days);
-                        formData.append("count", count);
+                        // 🐱 DEBUG: 打印发送的数据喵！
+                        var postData = { days: days, count: count };
+                        alert("[DEBUG vip.js]\ndays=" + days + " (type: " + typeof days + ")\ncount=" + count + " (type: " + typeof count + ")\n\nJSON: " + JSON.stringify(postData));
 
                         var res = await fetch("/admin/vip/generate", {
                             method: "POST",
                             headers: {
+                                "Content-Type": "application/json",
                                 "Authorization": "Bearer " + getToken()
                             },
-                            body: formData
+                            body: JSON.stringify(postData)
                         });
                         var data = await res.json();
 
@@ -130,7 +113,7 @@ document.addEventListener("DOMContentLoaded", function () {
                             }
                             close();
                         } else {
-                            alert(data.detail || "生成失败");
+                            alert("生成失败: " + JSON.stringify(data.detail || data));
                         }
                     } catch (e) {
                         console.error(e);
@@ -160,6 +143,31 @@ document.addEventListener("DOMContentLoaded", function () {
                 console.warn("history.js 未加载或未暴露 forceAdminAuditMode");
                 if (window.showToast) window.showToast("审计功能未就绪，请稍后重试", "warning");
             }
+        };
+    }
+
+    // ==================== 商业化：定价与购买 ====================
+    var upgradeVipBtn = document.getElementById("upgradeVipBtn");
+    var pricingModal = document.getElementById("pricingModal");
+    var buyVipBtn = document.getElementById("buyVipBtn");
+
+    // 淘宝店铺链接 (可以在 config.js 或这里配置)
+    // 暂时用 generic link, 待用户提供后替换
+    var SHOP_URL = "https://shop.taobao.com/";
+
+    if (upgradeVipBtn && pricingModal) {
+        upgradeVipBtn.onclick = function () {
+            pricingModal.style.display = "flex";
+        };
+    }
+
+    if (buyVipBtn) {
+        buyVipBtn.onclick = function () {
+            // 在新标签页打开购买链接
+            window.open(SHOP_URL, "_blank");
+            // 可选：关闭定价弹窗，打开激活弹窗，引导闭环
+            // pricingModal.style.display = "none";
+            // if (activateVipBtn) activateVipBtn.click();
         };
     }
 });

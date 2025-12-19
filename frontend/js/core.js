@@ -2,6 +2,31 @@
 
 // core.js - 全局初始化入口与核心工具
 
+// ===================================
+// Token & Auth Utils
+// ===================================
+window.getToken = function () {
+    return localStorage.getItem("token");
+};
+
+// 解析 JWT Token
+window.parseJwt = function (token) {
+    try {
+        var base64Url = token.split('.')[1];
+        var base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        var jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+    } catch (e) {
+        return {};
+    }
+};
+
+// ===================================
+// Core Logic
+// ===================================
+
 window.onload = function () {
     // 初始化 UI (标签切换等)
     if (typeof initUI === 'function') initUI();

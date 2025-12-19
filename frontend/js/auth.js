@@ -61,8 +61,9 @@ document.addEventListener("DOMContentLoaded", function () {
     var token = localStorage.getItem("token");
     var username = localStorage.getItem("username");
 
-    // 🔧 调试模式状态 (提前声明，确保 updateModalUI 能访问喵~)
-    var isDebugMode = false;
+    // 🔧 调试模式状态 (使用全局变量)
+    // var isDebugMode = false; // Removed in favor of window.isDebugMode
+
 
     // Init State
     checkLoginStatus();
@@ -324,12 +325,14 @@ document.addEventListener("DOMContentLoaded", function () {
                             if (config.google_client_id) {
                                 google.accounts.id.initialize({
                                     client_id: config.google_client_id,
-                                    callback: handleGoogleCredentialResponse,
-                                    // [Fix] 使用 redirect 模式，避免 COOP 弹窗问题
-                                    // redirect 模式不依赖 postMessage，完全绕过跨域隔离问题
+                                    // [Restore] 听主人的话，改回跳转模式 (Redirect Mode)
+                                    // 请确保 Google Console 中的 "Authorized redirect URIs" 包含:
+                                    // window.location.origin + "/auth/google-callback"
                                     ux_mode: "redirect",
-                                    login_uri: window.location.origin + "/auth/google-callback"
+                                    login_uri: window.location.origin + "/auth/google-callback",
+                                    // callback: handleGoogleCredentialResponse // redirect 模式不需要 callback
                                 });
+                                console.log("Google Login URI (Redirect):", window.location.origin + "/auth/google-callback");
                                 google.accounts.id.renderButton(
                                     googleBtn,
                                     { theme: "outline", size: "large", width: "100%" }
@@ -361,13 +364,21 @@ document.addEventListener("DOMContentLoaded", function () {
             if (rememberMeGroup) rememberMeGroup.style.display = "none";
 
             // 🔧 调试模式下隐藏验证码和邮箱验证喵~
-            var skipEmailCheck = (typeof isDebugMode !== 'undefined' && isDebugMode);
+            var skipEmailCheck = (typeof window.isDebugMode !== 'undefined' && window.isDebugMode);
             if (skipEmailCheck) {
                 if (captchaGroup) captchaGroup.style.display = "none";
+                // Debug Mode: Hide email/code inputs
                 if (emailGroup) emailGroup.style.display = "none";
                 if (codeGroup) codeGroup.style.display = "none";
+                if (authEmailInput) authEmailInput.removeAttribute("required");
+                if (authCodeInput) authCodeInput.removeAttribute("required");
+                if (captchaInput) captchaInput.removeAttribute("required");
             } else {
                 if (captchaGroup) captchaGroup.style.display = "block";
+                if (emailGroup) emailGroup.style.display = "block";
+                if (codeGroup) codeGroup.style.display = "block";
+                if (authEmailInput) authEmailInput.setAttribute("required", "true");
+                if (authCodeInput) authCodeInput.setAttribute("required", "true");
                 loadCaptcha();  // 加载验证码图片
             }
 
@@ -508,7 +519,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         } else if (currentAuthMode === 'register') {
             // 调试模式下跳过邮箱验证
-            var skipEmailCheck = (typeof isDebugMode !== 'undefined' && isDebugMode);
+            var skipEmailCheck = (typeof window.isDebugMode !== 'undefined' && window.isDebugMode);
 
             if (!user || !pass || (!skipEmailCheck && (!email || !code))) {
                 if (authMessage) authMessage.innerText = "请填写所有字段";
@@ -534,7 +545,7 @@ document.addEventListener("DOMContentLoaded", function () {
         } else if (currentAuthMode === 'register') {
             // 获取验证码输入
             var captchaCode = captchaInput ? captchaInput.value.trim() : '';
-            var skipEmailCheck = (typeof isDebugMode !== 'undefined' && isDebugMode);
+            var skipEmailCheck = (typeof window.isDebugMode !== 'undefined' && window.isDebugMode);
 
             if (skipEmailCheck) {
                 // 🔧 调试模式：使用简单注册端点（只需用户名+密码+图形验证码）
@@ -646,199 +657,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
-    // Generic Input Modal Helper
-    function showInputModal(title, message, inputs, callback) {
-        var modal = document.getElementById("inputModal");
-        var titleEl = document.getElementById("inputModalTitle");
-        var msgEl = document.getElementById("inputModalMessage");
-        var container = document.getElementById("inputContainer");
-        var submitBtn = document.getElementById("inputModalSubmitBtn");
-        var cancelBtn = document.getElementById("inputModalCancelBtn");
-        var closeBtn = document.getElementById("inputModalCloseBtn");
-
-        if (!modal) return;
-
-        titleEl.innerText = title;
-        msgEl.innerText = message || "";
-        container.innerHTML = "";
-
-        // Build inputs
-        inputs.forEach(cfg => {
-            var div = document.createElement("div");
-            div.style.marginBottom = "10px";
-            if (cfg.label) {
-                var label = document.createElement("label");
-                label.innerText = cfg.label;
-                label.style.display = "block";
-                label.style.marginBottom = "5px";
-                div.appendChild(label);
-            }
-            var input = document.createElement("input");
-            input.type = cfg.type || "text";
-            input.value = cfg.value || "";
-            input.placeholder = cfg.placeholder || "";
-            input.className = "form-control"; // reuse existing class
-            input.style.width = "100%";
-            input.id = cfg.id;
-            div.appendChild(input);
-            container.appendChild(div);
-        });
-
-        // Handlers
-        var closeModal = () => {
-            modal.style.display = "none";
-            // clear handlers to prevent leaks/duplication
-            submitBtn.onclick = null;
-        };
-
-        submitBtn.onclick = () => {
-            var values = {};
-            inputs.forEach(cfg => {
-                var el = document.getElementById(cfg.id);
-                values[cfg.id] = el ? el.value : "";
-            });
-            callback(values, closeModal);
-        };
-
-        cancelBtn.onclick = closeModal;
-        closeBtn.onclick = closeModal;
-
-        modal.style.display = "flex";
-    }
-
-    // 修改用户名
-
-
-    // 修改密码
-
-
-
-    // Settings Logic
-    var settingsBtn = document.getElementById("settingsBtn");
-    var settingsModal = document.getElementById("settingsModal");
-    var debugModeToggle = document.getElementById("debugModeToggle");
-    // isDebugMode 已在文件开头声明，这里不再重复
-
-    // Load settings on start
-    loadSystemSettings();
-
-    async function loadSystemSettings() {
-        try {
-            var res = await fetch("/system/settings");
-            if (res.ok) {
-                var settings = await res.json();
-                isDebugMode = settings.debug_mode || false;
-                if (debugModeToggle) debugModeToggle.checked = isDebugMode;
-                // 🔧 CSS 大法：同步更新 body 的 class 喵~
-                document.body.classList.toggle('debug-mode', isDebugMode);
-                console.log("Debug Mode:", isDebugMode);
-            }
-        } catch (e) {
-            console.error("Failed to load settings", e);
-        }
-    }
-
-    if (settingsBtn) {
-        settingsBtn.onclick = function () {
-            if (settingsModal) settingsModal.style.display = "flex";
-        }
-    }
-
-    // Close Settings Modal
-    var settingsModalCloseBtn = document.getElementById("settingsModalCloseBtn");
-    if (settingsModalCloseBtn) {
-        settingsModalCloseBtn.onclick = function () {
-            if (settingsModal) settingsModal.style.display = "none";
-        }
-    }
-
-    // Click outside to close settings modal
-    if (settingsModal) {
-        settingsModal.addEventListener('click', function (e) {
-            if (e.target === settingsModal) {
-                settingsModal.style.display = "none";
-            }
-        });
-    }
-
-    if (debugModeToggle) {
-        debugModeToggle.onchange = async function () {
-            var newValue = this.checked;
-            // 🔧 立即更新 UI，不等后端返回，防止视觉延迟
-            document.body.classList.toggle('debug-mode', newValue);
-
-            try {
-                var res = await fetch("/system/settings", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ debug_mode: newValue })
-                });
-                if (res.ok) {
-                    var data = await res.json();
-                    isDebugMode = data.debug_mode;
-                    // 再次确认状态 (防回滚)
-                    document.body.classList.toggle('debug-mode', isDebugMode);
-                    if (window.showToast) window.showToast("调试模式已" + (isDebugMode ? "开启" : "关闭"), "success");
-                    // Refresh UI if register modal is open
-                    updateModalUI();
-                }
-            } catch (e) {
-                console.error(e);
-                this.checked = !newValue; // Revert
-                alert("设置保存失败");
-            }
-        }
-    }
-
-    // Override updateModalUI to handle debug mode visibility
-    var originalUpdateModalUI = updateModalUI;
-    updateModalUI = function () {
-        // Call original to set basic state (restores Google Login etc)
-        if (typeof originalUpdateModalUI === 'function') originalUpdateModalUI();
-
-        // Apply Debug Mode overrides
-        if (currentAuthMode === 'register') {
-            var emailInput = document.getElementById("email");
-            var codeInput = document.getElementById("code");
-            var emailGroup = document.getElementById("emailGroup");
-            var codeGroup = document.getElementById("codeGroup");
-
-            if (isDebugMode) {
-                if (emailGroup) emailGroup.style.display = "none";
-                if (codeGroup) codeGroup.style.display = "none";
-                if (emailInput) emailInput.removeAttribute("required");
-                if (codeInput) codeInput.removeAttribute("required");
-                // 🔧 验证码也要隐藏喵~
-                var captchaGroup = document.getElementById("captchaGroup");
-                if (captchaGroup) captchaGroup.style.display = "none";
-            } else {
-                if (emailGroup) emailGroup.style.display = "block";
-                if (codeGroup) codeGroup.style.display = "block";
-                if (emailInput) emailInput.setAttribute("required", "true");
-                if (codeInput) codeInput.setAttribute("required", "true");
-                // 生产模式显示验证码
-                var captchaGroup = document.getElementById("captchaGroup");
-                if (captchaGroup) captchaGroup.style.display = "block";
-            }
-        }
-    };
-
-
-
-
-    // 注销账号 - Fixed: Removed native confirm
-
-
-
-
-
-    // Global function for Revoke
-
-
     // ==================== 暴露共享函数到 window 对象 ====================
     // 🔧 让拆分后的模块可以调用这些函数喵~
     window.checkLoginStatus = checkLoginStatus;
     window.handleLogout = handleLogout;
-    window.showInputModal = showInputModal;
+    // window.showInputModal = showInputModal; // Already in ui.js
     window.updateModalUI = updateModalUI;
 });

@@ -659,7 +659,8 @@
                     <input type="text" id="userSearchInput" placeholder="用户名/邮箱..."
                         style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; width:200px;">
                     <button class="btn btn-primary" onclick="loadUsers()">搜索</button>
-                    <!-- <button class="btn btn-primary" onclick="openCreateUserModal()">+ 新建用户</button> -->
+                    <button class="btn btn-warning" onclick="openGenerateVipModal()" style="margin-left:10px;">🎁 生成 VIP
+                        码</button>
                 </div>
             </div>
             <div class="table-container">
@@ -672,7 +673,7 @@
                             <th>角色</th>
                             <th>VIP 状态</th>
                             <th>注册时间</th>
-                            <th>最后登录</th>
+                            <th>注册时间</th>
                             <th>操作</th>
                         </tr>
                     </thead>
@@ -748,6 +749,8 @@
                     <button class="btn btn-primary" onclick="loadImages()">搜索</button>
                 </div>
 
+
+
                 <!-- 用户管理 - 重置密码模态框 -->
                 <div class="modal" id="resetPasswordModal">
                     <div class="modal-content">
@@ -764,6 +767,33 @@
                             <button class="btn btn-secondary" onclick="closeResetPasswordModal()">取消</button>
                             <button class="btn btn-danger" onclick="confirmResetPassword()">确认修改</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIP 生成模态框 -->
+            <div class="modal" id="generateVipModal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>生成 VIP 激活码</h3>
+                        <button class="modal-close" onclick="closeGenerateVipModal()">×</button>
+                    </div>
+                    <div class="form-group">
+                        <label>生成数量</label>
+                        <input type="number" id="genVipCount" value="10" min="1" max="100">
+                    </div>
+                    <div class="form-group">
+                        <label>有效期（天）</label>
+                        <input type="number" id="genVipDays" value="30" min="1">
+                    </div>
+                    <div class="form-group" id="generatedCodesConfig" style="display:none;">
+                        <label>生成结果 (请复制保存)</label>
+                        <textarea id="vipResultText" rows="10" readonly style="font-family:monospace;"></textarea>
+                    </div>
+                    <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+                        <button class="btn btn-secondary" onclick="closeGenerateVipModal()">关闭</button>
+                        <button class="btn btn-primary" onclick="confirmGenerateVip()" id="generateBtn">立即生成 (Debug
+                            v1)</button>
                     </div>
                 </div>
             </div>
@@ -873,7 +903,7 @@
                         <td>${roleBadges}</td>
                         <td>${user.vip_expiry ? new Date(user.vip_expiry).toLocaleDateString() : '-'}</td>
                         <td>${new Date(user.created_at).toLocaleDateString()}</td>
-                        <td>${user.last_login ? new Date(user.last_login).toLocaleString() : '-'}</td>
+                        <td>${new Date(user.created_at).toLocaleDateString()}</td>
                         <td style="display:flex; gap:5px; flex-wrap:wrap;">${actions}</td>
                     `;
                     tbody.appendChild(row);
@@ -950,8 +980,8 @@
         async function confirmResetPassword() {
             if (!currentUserIdToReset) return;
             const newPwd = document.getElementById('newAdminSetPassword').value.trim();
-            if (!newPwd || newPwd.length < 8) {
-                alert('请输入至少8位的新密码');
+            if (!newPwd) {
+                alert('请输入新密码');
                 return;
             }
 
@@ -973,6 +1003,80 @@
                 }
             } catch (e) {
                 alert('请求异常: ' + e.message);
+            }
+        }
+
+        // VIP 生成器相关
+        function openGenerateVipModal() {
+            document.getElementById('genVipCount').value = 10;
+            document.getElementById('genVipDays').value = 30;
+            document.getElementById('generatedCodesConfig').style.display = 'none';
+            document.getElementById('generateBtn').style.display = 'block';
+            document.getElementById('generateVipModal').style.display = 'flex';
+        }
+
+        function closeGenerateVipModal() {
+            document.getElementById('generateVipModal').style.display = 'none';
+        }
+
+        async function confirmGenerateVip() {
+            const countInput = document.getElementById('genVipCount').value;
+            const daysInput = document.getElementById('genVipDays').value;
+
+            if (!countInput || !daysInput) return alert('请填写完整数量和有效期');
+
+            // DEBUG: 打印获取到的原始值
+            alert(`[Debug Info]\nCount Input: "${countInput}"\nDays Input: "${daysInput}"\n\n点击确定继续...`);
+
+            const count = parseInt(countInput);
+            const days = parseInt(daysInput);
+
+            if (isNaN(count) || count < 1 || count > 100) return alert('生成数量必须在 1-100 之间');
+            if (isNaN(days) || days < 1) return alert('有效期至少 1 天');
+
+            const btn = document.getElementById('generateBtn');
+            btn.disabled = true;
+            btn.innerText = '生成中...';
+
+            try {
+                const res = await fetch('/admin/vip/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ count: count, days: days })
+                });
+
+                // 处理非 200 响应
+                if (!res.ok) {
+                    const errData = await res.json();
+                    let errMsg = errData.detail || '未知错误';
+                    if (typeof errMsg === 'object') {
+                        errMsg = JSON.stringify(errMsg, null, 2);
+                    }
+                    alert('生成失败:\n' + errMsg);
+                    return;
+                }
+
+                const result = await res.json();
+
+                if (result.success) {
+                    const textArea = document.getElementById('vipResultText');
+                    textArea.value = `=== ${new Date().toLocaleString()} 生成 (有效期 ${days} 天) ===\n` + result.codes.join('\n');
+                    document.getElementById('generatedCodesConfig').style.display = 'block';
+                    btn.style.display = 'none'; // 隐藏生成按钮防止重复点击，强制关闭或重新打开
+                    alert(`成功生成 ${result.count} 个激活码`);
+                } else {
+                    let detail = result.detail || result.error || '未知错误';
+                    if (typeof detail === 'object') detail = JSON.stringify(detail);
+                    alert('生成失败: ' + detail);
+                }
+            } catch (e) {
+                alert('请求异常: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '立即生成';
             }
         }
 
@@ -1492,6 +1596,7 @@
             if (await checkAuth()) {
                 loadStats();
                 loadReports('pending');
+                loadUsers(); // 确保加载用户列表
                 loadImages();
             }
         })();

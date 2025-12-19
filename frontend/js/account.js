@@ -12,33 +12,8 @@ document.addEventListener("DOMContentLoaded", function () {
     var activateVipBtn = document.getElementById("activateVipBtn");
 
     // ==================== 工具函数 ====================
-    /**
-     * 获取当前 token
-     */
-    function getToken() {
-        return localStorage.getItem("token");
-    }
+    // 🔧 已统一移动到 core.js 和 ui.js
 
-    /**
-     * 通用输入弹窗 (如果 auth.js 没有暴露，这里自己实现一个简化版)
-     */
-    function showInputModal(title, message, inputs, callback) {
-        // 尝试使用 auth.js 暴露的全局函数
-        if (typeof window.showInputModal === 'function') {
-            window.showInputModal(title, message, inputs, callback);
-            return;
-        }
-
-        // 简化版实现
-        var values = {};
-        inputs.forEach(function (input) {
-            var value = prompt(message + "\n" + input.placeholder);
-            values[input.id] = value;
-        });
-        if (callback) callback(values, function () { });
-    }
-
-    // [已移动] VIP 激活逻辑已移动至 vip.js
 
     // ==================== 修改用户名 ====================
     if (changeUsernameBtn) {
@@ -198,7 +173,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (userStatsDisplay) {
                     var info = "已上传 " + stats.upload_count + " 张图片";
                     var vipInfo = stats.is_vip ? ("VIP到期: " + (stats.vip_expiry ? stats.vip_expiry.split("T")[0] : "无限期")) : "普通用户";
-                    userStatsDisplay.innerHTML = `注册: ${stats.created_at.split("T")[0]} | 上传: ${stats.upload_count} | ${vipInfo}`;
+                    var createdAt = stats.created_at ? stats.created_at.split("T")[0] : "未知";
+                    userStatsDisplay.innerHTML = `注册: ${createdAt} | 上传: ${stats.upload_count || 0} | ${vipInfo}`;
                 }
             }
         } catch (e) {

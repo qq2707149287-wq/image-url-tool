@@ -68,7 +68,8 @@ UPLOAD_LIMIT_FREE = 5           # 免费注册用户
 UPLOAD_LIMIT_VIP = 999999       # VIP 用户（相当于无限）
 
 # ==================== 文件配置 ====================
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 最大文件大小：10MB
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 免费/匿名用户最大文件大小：10MB
+MAX_FILE_SIZE_VIP = 50 * 1024 * 1024  # VIP用户最大文件大小：50MB
 ALLOWED_EXTENSIONS = {
     '.jpg', '.jpeg', '.png', '.gif', '.webp', 
     '.avif', '.heic', '.heif', '.bmp', '.svg', '.ico'

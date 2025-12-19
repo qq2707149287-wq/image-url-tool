@@ -244,7 +244,7 @@ def get_all_users(page: int = 1, page_size: int = 20, search: str = None) -> Dic
             c = conn.cursor()
             
             offset = (page - 1) * page_size
-            query = "SELECT id, username, email, is_admin, is_vip, vip_expiry, created_at, last_login FROM users"
+            query = "SELECT id, username, email, is_admin, is_vip, vip_expiry, created_at FROM users"
             params = []
             
             if search:

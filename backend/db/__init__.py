@@ -55,7 +55,9 @@ from .vip import (
     activate_vip,
     create_vip_code,
     get_today_upload_count,
+    generate_vip_code_str,
 )
+
 
 # 通知系统
 from .notifications import (
@@ -97,7 +99,8 @@ __all__ = [
     # 会话
     'create_session', 'get_active_sessions', 'revoke_session', 'validate_session', 'update_session_activity',
     # VIP
-    'activate_vip', 'create_vip_code', 'get_today_upload_count',
+    'activate_vip', 'create_vip_code', 'get_today_upload_count', 'generate_vip_code_str',
+
     # 通知
     'create_notification', 'get_notifications', 'mark_notification_read', 'cleanup_old_notifications',
     # 管理员

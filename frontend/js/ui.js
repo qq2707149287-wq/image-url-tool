@@ -132,3 +132,66 @@ window.showToast = function (message, type) {
         }, 300);
     }, 3000);
 };
+
+// ===================================
+// Generic Input Modal (通用输入弹窗)
+// ===================================
+window.showInputModal = function (title, message, inputs, callback) {
+    var modal = document.getElementById("inputModal");
+    var titleEl = document.getElementById("inputModalTitle");
+    var msgEl = document.getElementById("inputModalMessage");
+    var container = document.getElementById("inputContainer");
+    var submitBtn = document.getElementById("inputModalSubmitBtn");
+    var cancelBtn = document.getElementById("inputModalCancelBtn");
+    var closeBtn = document.getElementById("inputModalCloseBtn");
+
+    if (!modal) return;
+
+    titleEl.innerText = title;
+    msgEl.innerText = message || "";
+    container.innerHTML = "";
+
+    // Build inputs
+    inputs.forEach(function (cfg) {
+        var div = document.createElement("div");
+        div.style.marginBottom = "10px";
+        if (cfg.label) {
+            var label = document.createElement("label");
+            label.innerText = cfg.label;
+            label.style.display = "block";
+            label.style.marginBottom = "5px";
+            div.appendChild(label);
+        }
+        var input = document.createElement("input");
+        input.type = cfg.type || "text";
+        input.value = cfg.value || "";
+        input.placeholder = cfg.placeholder || "";
+        input.className = "form-control";
+        input.style.width = "100%";
+        input.id = cfg.id;
+        div.appendChild(input);
+        container.appendChild(div);
+    });
+
+    // Handlers
+    var closeModal = function () {
+        modal.style.display = "none";
+        // clear handlers to prevent leaks
+        submitBtn.onclick = null;
+    };
+
+    submitBtn.onclick = function () {
+        var values = {};
+        inputs.forEach(function (cfg) {
+            var el = document.getElementById(cfg.id);
+            values[cfg.id] = el ? el.value : "";
+        });
+        callback(values, closeModal);
+    };
+
+    cancelBtn.onclick = closeModal;
+    closeBtn.onclick = closeModal;
+
+    modal.style.display = "flex";
+};
+

@@ -55,11 +55,11 @@ def get_image_info(content: bytes) -> dict[str, int]:
     except Exception:
         return {"width": 0, "height": 0, "size": len(content)}
 
-def validate_file_upload(filename: str, content: bytes) -> None:
-    if len(content) > MAX_FILE_SIZE:
+def validate_file_upload(filename: str, content: bytes, max_size: int = MAX_FILE_SIZE) -> None:
+    if len(content) > max_size:
         raise HTTPException(
             status_code=400,
-            detail=f"文件过大，最大允许 {MAX_FILE_SIZE // (1024*1024)}MB"
+            detail=f"文件过大，当前限制 {max_size // (1024*1024)}MB。请升级 VIP 解锁更大文件限制。"
         )
     ext = os.path.splitext(filename or '')[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -200,8 +200,10 @@ async def upload_endpoint(
                  detail_msg += " 请激活 VIP 解锁无限上传！"
             raise HTTPException(status_code=429, detail=detail_msg)
         
-        # 2. Basic Validation
-        validate_file_upload(filename, content)
+        # 2. Basic Validation & Dynamic File Size Limit
+        # 确定文件大小限制
+        max_size = config.MAX_FILE_SIZE_VIP if (current_user and current_user.get("is_vip")) else config.MAX_FILE_SIZE
+        validate_file_upload(filename, content, max_size)
         
         # 3. Hashing
         fhash = calculate_hash(content)

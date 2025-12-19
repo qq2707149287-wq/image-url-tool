@@ -10,6 +10,15 @@ from .connection import get_db_connection
 
 logger = logging.getLogger(__name__)
 
+def generate_vip_code_str(length: int = 16) -> str:
+    """生成格式化的 VIP 激活码 (XXXX-XXXX-XXXX-XXXX)"""
+    import secrets
+    import string
+    chars = string.ascii_uppercase + string.digits
+    raw = ''.join(secrets.choice(chars) for _ in range(length))
+    return '-'.join(raw[i:i+4] for i in range(0, length, 4))
+
+
 
 def activate_vip(user_id: int, code: str) -> Dict[str, Any]:
     """激活 VIP"""
