@@ -651,6 +651,45 @@
             </div>
         </div>
 
+        <!-- 用户管理 -->
+        <div class="section">
+            <div class="section-header">
+                <h2>👥 用户管理</h2>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <input type="text" id="userSearchInput" placeholder="用户名/邮箱..."
+                        style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; width:200px;">
+                    <button class="btn btn-primary" onclick="loadUsers()">搜索</button>
+                    <!-- <button class="btn btn-primary" onclick="openCreateUserModal()">+ 新建用户</button> -->
+                </div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>用户名</th>
+                            <th>邮箱</th>
+                            <th>角色</th>
+                            <th>VIP 状态</th>
+                            <th>注册时间</th>
+                            <th>最后登录</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <tr>
+                            <td colspan="8" class="loading">加载中...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <!-- 分页控件 -->
+            <div class="pagination" id="usersPagination"
+                style="padding: 16px; border-top: 1px solid var(--border-color); display:flex; justify-content:center; gap: 8px;">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+
         <!-- 举报管理 -->
         <div class="section">
             <div class="section-header">
@@ -708,6 +747,25 @@
                         style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; width:200px;">
                     <button class="btn btn-primary" onclick="loadImages()">搜索</button>
                 </div>
+
+                <!-- 用户管理 - 重置密码模态框 -->
+                <div class="modal" id="resetPasswordModal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>重置密码</h3>
+                            <button class="modal-close" onclick="closeResetPasswordModal()">×</button>
+                        </div>
+                        <div class="form-group" style="display:flex; flex-direction:column; gap:8px;">
+                            <label>请输入新密码</label>
+                            <input type="password" id="newAdminSetPassword" placeholder="8位以上强密码">
+                            <p style="font-size: 0.8rem; color: var(--text-secondary);">该操作将强制覆盖用户现有密码。</p>
+                        </div>
+                        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+                            <button class="btn btn-secondary" onclick="closeResetPasswordModal()">取消</button>
+                            <button class="btn btn-danger" onclick="confirmResetPassword()">确认修改</button>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="image-grid" id="imagesGrid">
                 <div class="loading" style="grid-column:1/-1;">加载中...</div>
@@ -749,8 +807,203 @@
 
     <script>
         const token = localStorage.getItem('token');
-        let currentReportId = null;
+        let currentUserIdToReset = null;
         let imagesPage = 1;
+        let usersPage = 1;
+
+        // 页面加载时执行
+        window.addEventListener('DOMContentLoaded', async () => {
+            if (await checkAuth()) {
+                loadStats();
+                loadReports(); // 默认加载
+                loadUsers();   // 加载用户列表
+                loadImages();  // 加载图片列表
+            }
+        });
+
+        // ==================== 用户管理 ====================
+        async function loadUsers(page = 1) {
+            usersPage = page;
+            const tbody = document.getElementById('usersTableBody');
+            const search = document.getElementById('userSearchInput').value.trim();
+            tbody.innerHTML = '<tr><td colspan="8" class="loading">加载中...</td></tr>';
+
+            try {
+                let url = `/admin/users?page=${page}&page_size=20`;
+                if (search) url += `&search=${encodeURIComponent(search)}`;
+
+                const res = await fetch(url, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+
+                tbody.innerHTML = '';
+                if (!data.data || data.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-secondary);">暂无用户</td></tr>';
+                    document.getElementById('usersPagination').innerHTML = '';
+                    return;
+                }
+
+                data.data.forEach(user => {
+                    const row = document.createElement('tr');
+
+                    // 角色标签
+                    let roleBadges = '';
+                    if (user.is_admin) roleBadges += `<span class="badge" style="background:var(--primary-color);">管理员</span> `;
+                    if (user.is_vip) roleBadges += `<span class="badge" style="background:var(--warning-color);">VIP</span>`;
+                    if (!roleBadges) roleBadges = '<span style="color:var(--text-secondary);font-size:0.8rem;">普通用户</span>';
+
+                    // 操作按钮
+                    let actions = '';
+                    // 提权/降权
+                    if (user.is_admin) {
+                        actions += `<button class="btn btn-sm btn-secondary" onclick="promoteUser(${user.id}, false)">取消管理</button> `;
+                    } else {
+                        actions += `<button class="btn btn-sm btn-primary" onclick="promoteUser(${user.id}, true)">设为管理</button> `;
+                    }
+
+                    // 重置密码 & 封禁
+                    actions += `<button class="btn btn-sm btn-secondary" onclick="openResetPasswordModal(${user.id})">改密</button> `;
+                    actions += `<button class="btn btn-sm btn-danger" onclick="banUser(${user.id})">封禁</button>`;
+
+                    row.innerHTML = `
+                        <td>#${user.id}</td>
+                        <td style="font-weight:600;">${user.username}</td>
+                        <td style="color:var(--text-secondary);">${user.email || '-'}</td>
+                        <td>${roleBadges}</td>
+                        <td>${user.vip_expiry ? new Date(user.vip_expiry).toLocaleDateString() : '-'}</td>
+                        <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                        <td>${user.last_login ? new Date(user.last_login).toLocaleString() : '-'}</td>
+                        <td style="display:flex; gap:5px; flex-wrap:wrap;">${actions}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                // 渲染分页
+                renderPagination(data.total, data.page, data.page_size, 'usersPagination', loadUsers);
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = `<tr><td colspan="8" style="color:red; text-align:center;">加载失败: ${e.message}</td></tr>`;
+            }
+        }
+
+        async function promoteUser(userId, isAdmin) {
+            if (!confirm(`确定要将用户 #${userId} ${isAdmin ? '设为管理员' : '取消管理员权限'} 吗？`)) return;
+
+            try {
+                const res = await fetch(`/admin/users/${userId}/promote`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ is_admin: isAdmin })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    alert('操作成功');
+                    loadUsers(usersPage);
+                } else {
+                    alert('操作失败: ' + (result.detail || '未知错误'));
+                }
+            } catch (e) {
+                alert('请求异常: ' + e.message);
+            }
+        }
+
+        async function banUser(userId) {
+            if (!confirm(`⚠️ 警告：封禁用户将强制注销其所有登录状态。确认封禁用户 #${userId}？`)) return;
+
+            try {
+                const res = await fetch(`/admin/users/${userId}/ban`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ reason: "Admin Action" })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    alert('用户已封禁 (所有 Session 已清理)');
+                    loadUsers(usersPage);
+                } else {
+                    alert('操作失败: ' + (result.detail || '未知错误'));
+                }
+            } catch (e) {
+                alert('请求异常: ' + e.message);
+            }
+        }
+
+        // 密码重置相关
+        function openResetPasswordModal(userId) {
+            currentUserIdToReset = userId;
+            document.getElementById('newAdminSetPassword').value = '';
+            document.getElementById('resetPasswordModal').style.display = 'flex';
+        }
+
+        function closeResetPasswordModal() {
+            document.getElementById('resetPasswordModal').style.display = 'none';
+            currentUserIdToReset = null;
+        }
+
+        async function confirmResetPassword() {
+            if (!currentUserIdToReset) return;
+            const newPwd = document.getElementById('newAdminSetPassword').value.trim();
+            if (!newPwd || newPwd.length < 8) {
+                alert('请输入至少8位的新密码');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/admin/users/${currentUserIdToReset}/reset-password`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ new_password: newPwd })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    alert('密码重置成功');
+                    closeResetPasswordModal();
+                } else {
+                    alert('操作失败: ' + (result.detail || '未知错误'));
+                }
+            } catch (e) {
+                alert('请求异常: ' + e.message);
+            }
+        }
+
+        // 通用分页渲染器
+        function renderPagination(total, page, pageSize, containerId, loadersFunc) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            const totalPages = Math.ceil(total / pageSize);
+
+            if (totalPages <= 1) return;
+
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'btn btn-sm btn-secondary';
+            prevBtn.innerText = '上一页';
+            prevBtn.disabled = page === 1;
+            prevBtn.onclick = () => loadersFunc(page - 1);
+            container.appendChild(prevBtn);
+
+            const info = document.createElement('span');
+            info.style.fontSize = '0.9rem';
+            info.style.color = 'var(--text-secondary)';
+            info.innerText = ` ${page} / ${totalPages} `;
+            container.appendChild(info);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'btn btn-sm btn-secondary';
+            nextBtn.innerText = '下一页';
+            nextBtn.disabled = page === totalPages;
+            nextBtn.onclick = () => loadersFunc(page + 1);
+            container.appendChild(nextBtn);
+        }
 
         // 检查登录状态
         async function checkAuth() {

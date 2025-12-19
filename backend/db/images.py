@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # backend/db/images.py
 # 图片相关数据库操作 - 喵～这里是图片记录的大本营
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import socket  # 用于获取网络连接信息，这里主要用来获取本机IP地址
 import os      # 操作系统接口，用于文件路径处理、环境变量获取等
 import hashlib # 哈希算法库，用于计算文件的"指纹"（MD5, SHA256等）
@@ -140,8 +141,20 @@ async def lifespan(_app: FastAPI):
     print("\n👋 服务器已停止\n")
 
 
+# [SECURITY] API 限流配置
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from .limiter import limiter
+
 # 创建 FastAPI 应用实例
 app = FastAPI(title="图片URL获取工具", lifespan=lifespan)
+# 挂载 Limiter 状态
+app.state.limiter = limiter
+# 添加全局异常处理器
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# 添加中间件
+app.add_middleware(SlowAPIMiddleware)
 app.include_router(auth.router)
 app.include_router(upload.router)
 app.include_router(user.router)

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # backend/db/admin.py
 # 管理员功能数据库操作 - 喵～这里是管理员的秘密基地
 
@@ -231,3 +232,81 @@ def create_auto_admin() -> bool:
     except Exception as e:
         logger.error(f"❌ 创建自动管理员失败: {e}")
         return False
+
+
+# ==================== 用户管理功能 (Stage 5) ====================
+
+def get_all_users(page: int = 1, page_size: int = 20, search: str = None) -> Dict[str, Any]:
+    """获取用户列表 (管理员用)"""
+    try:
+        with get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            offset = (page - 1) * page_size
+            query = "SELECT id, username, email, is_admin, is_vip, vip_expiry, created_at, last_login FROM users"
+            params = []
+            
+            if search:
+                query += " WHERE username LIKE ? OR email LIKE ?"
+                params.extend([f"%{search}%", f"%{search}%"])
+                
+            query += " ORDER BY id DESC LIMIT ? OFFSET ?"
+            params.extend([page_size, offset])
+            
+            c.execute(query, params)
+            users = [dict(row) for row in c.fetchall()]
+            
+            # 统计总数
+            count_query = "SELECT COUNT(*) FROM users"
+            count_params = []
+            if search:
+                count_query += " WHERE username LIKE ? OR email LIKE ?"
+                count_params.extend([f"%{search}%", f"%{search}%"])
+                
+            c.execute(count_query, count_params)
+            total = c.fetchone()[0]
+            
+            return {"data": users, "total": total, "page": page, "page_size": page_size}
+    except Exception as e:
+        logger.error(f"Get all users failed: {e}")
+        return {"data": [], "total": 0}
+
+def promote_user_to_admin(user_id: int, is_admin: bool) -> bool:
+    """设置用户管理员权限"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute("UPDATE users SET is_admin = ? WHERE id = ?", (1 if is_admin else 0, user_id))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Promote user failed: {e}")
+        return False
+
+def reset_user_password_by_admin(user_id: int, password_hash: str) -> bool:
+    """强制重置用户密码"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            c.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Reset user password failed: {e}")
+        return False
+
+def ban_user(user_id: int) -> bool:
+    """封禁用户 (实际上是删除用户及历史？或者加一个 is_banned 字段？这里暂时简单处理：删除所有Session并修改密码为随机)"""
+    # 暂时实现为：注销所有 Session
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            # 删除所有会话
+            c.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Ban user failed: {e}")
+        return False
+

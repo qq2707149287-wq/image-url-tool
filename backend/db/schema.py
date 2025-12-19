@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # backend/db/schema.py
 # 数据库结构定义
 

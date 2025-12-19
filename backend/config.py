@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # config.py - 集中管理配置常量
 # 将硬编码的"魔法数字"移到这里，便于维护和修改
 
@@ -12,11 +13,39 @@ logger = logging.getLogger(__name__)
 
 # ==================== 安全配置 ====================
 # [SECURITY] SECRET_KEY 用于 JWT 签名和其他加密操作
-# 生产环境必须在 .env 中设置此值！
+# 优先级: 环境变量 > .secret_key 文件 > 随机生成并保存
+_secret_file_path = os.path.join(os.getenv("DATA_DIR") or os.path.dirname(os.path.abspath(__file__)), ".secret_key")
 _secret_key = os.getenv("SECRET_KEY")
+
 if not _secret_key:
-    logger.warning("⚠️ [Config] 未配置 SECRET_KEY! 使用随机生成的临时密钥。")
-    _secret_key = "".join(random.choices(string.ascii_letters + string.digits, k=64))
+    # 尝试从文件读取
+    if os.path.exists(_secret_file_path):
+        try:
+            with open(_secret_file_path, "r", encoding="utf-8") as f:
+                _secret_key = f.read().strip()
+                if _secret_key:
+                    logger.info(f"🔑 [Config] 从文件加载了 SECRET_KEY: {_secret_file_path}")
+        except Exception as e:
+            logger.error(f"❌ [Config] 读取密钥文件失败: {e}")
+
+    # 如果还是没有，生成并保存
+    if not _secret_key:
+        logger.warning("⚠️ [Config] 未配置 SECRET_KEY! 正在生成持久化密钥...")
+        _secret_key = "".join(random.choices(string.ascii_letters + string.digits, k=64))
+        try:
+            with open(_secret_file_path, "w", encoding="utf-8") as f:
+                f.write(_secret_key)
+            logger.info(f"✅ [Config] 已将新生成的 SECRET_KEY 保存至: {_secret_file_path}")
+            # Windows下尝试隐藏文件 (可选)
+            if os.name == 'nt':
+                try:
+                    import ctypes
+                    ctypes.windll.kernel32.SetFileAttributesW(_secret_file_path, 2) # FILE_ATTRIBUTE_HIDDEN
+                except:
+                    pass
+        except Exception as e:
+            logger.error(f"❌ [Config] 保存密钥文件失败: {e}")
+
 SECRET_KEY = _secret_key
 
 # JWT 算法
@@ -96,5 +125,12 @@ else:
     _current_dir = os.path.dirname(os.path.abspath(__file__))
     _project_root = os.path.dirname(_current_dir)
     DB_PATH = os.path.join(_project_root, "history.db")
+
+# ==================== 业务逻辑配置 ====================
+VERIFICATION_CODE_LENGTH = 6
+VERIFICATION_CODE_EXPIRY_MINUTES = 10
+DEBUG_CAPTCHA_CODE = "abcd"
+SHORT_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1天
+VIP_LINK_EXPIRE_DAYS = 365
 
 

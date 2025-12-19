@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
 # backend/db/__init__.py
 # 数据库操作模块 - 统一导出所有函数，保持向后兼容
 # 喵～这样外部的 `from .. import database` 调用方式完全不需要修改！
 
 # 核心连接和初始化
-from .connection import get_db_connection, init_db, DB_PATH
+from .connection import get_db_connection, init_db, DB_PATH, get_db
 
 # 图片操作
 from .images import (
@@ -74,12 +75,16 @@ from .admin import (
     batch_resolve_reports,
     batch_delete_images_by_hashes,
     create_auto_admin,
+    get_all_users,
+    promote_user_to_admin,
+    reset_user_password_by_admin,
+    ban_user,
 )
 
 # 导出所有公共接口
 __all__ = [
     # 连接
-    'get_db_connection', 'init_db', 'DB_PATH',
+    'get_db_connection', 'init_db', 'DB_PATH', 'get_db',
     # 图片
     'save_to_db', 'get_history_list', 'delete_history_items', 'clear_all_history',
     'rename_history_item', 'delete_image_by_hash_system', 'get_image_by_hash', 'get_image_by_url',
@@ -98,5 +103,6 @@ __all__ = [
     # 管理员
     'get_admin_stats', 'create_abuse_report', 'get_abuse_reports', 'resolve_abuse_report',
     'get_pending_reports_count', 'batch_resolve_reports', 'batch_delete_images_by_hashes', 'create_auto_admin',
+    'get_all_users', 'promote_user_to_admin', 'reset_user_password_by_admin', 'ban_user',
 ]
 

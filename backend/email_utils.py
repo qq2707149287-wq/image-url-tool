@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # 邮件发送工具
 # 使用标准 smtplib，支持 SSL (465) 和 STARTTLS (587) 两种模式
 

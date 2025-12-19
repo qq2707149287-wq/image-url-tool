@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # backend/db/connection.py
 # 数据库连接和初始化 - 喵～这是整个数据库模块的基础设施
 
@@ -30,6 +31,19 @@ def get_db_connection() -> Generator[sqlite3.Connection, None, None]:
         yield conn 
     finally:
         conn.close() 
+
+
+def get_db():
+    """
+    FastAPI 依赖项: 获取数据库连接
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
+
 
 
 def init_db() -> None:

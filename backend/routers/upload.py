@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 import os
+import sqlite3
 import hashlib
 import mimetypes
 import logging
@@ -292,63 +294,56 @@ async def upload_endpoint(
 
 
 @router.get("/view/{image_identifier}", response_class=HTMLResponse)
-async def view_image_page(request: Request, image_identifier: str):
+async def view_image_page(
+    request: Request, 
+    image_identifier: str,
+    conn: sqlite3.Connection = Depends(database.get_db)
+):
     """
     广告落地页 (Landing Page)
     :param image_identifier: 图片的 hash 或者 filename
     """
     try:
-        # 1. 尝试从数据库查找图片信息
-        # 我们需要先根据 identifier 找到对应的记录
-        # database.py 目前没有直接根据 hash 或 filename 查找单条记录的公开函数 (只有 list)
-        # 所以我们得手写一段 SQL 或者修改 database.py。
-        # 这里为了不改动 database.py, 我们直接在这里查询 (虽然不太优雅，但最快)
+        # [Refactor] 使用 Depends(get_db) 注入的连接
+        c = conn.cursor()
         
-        with database.get_db_connection() as conn:
-            conn.row_factory = database.sqlite3.Row
-            c = conn.cursor()
-            
-            # 尝试匹配 hash 或 filename
-            # filename 可能是 URL 编码的，也可能包含后缀
-            # 优先匹配 hash (通常是无后缀的)
-            c.execute("SELECT * FROM history WHERE hash = ? OR filename = ?", (image_identifier, image_identifier))
-            row = c.fetchone()
-            
-            if not row:
-                # 可能是带后缀的文件名，尝试去掉后缀再查 hash? 或者是 filename
-                # 暂时只支持精确匹配
-                return templates.TemplateResponse("view.html", {
-                    "request": request,
-                    "filename": "404 Not Found",
-                    "raw_url": "/static/404.png", # 只有你有这个图
-                    "width": 0,
-                    "height": 0,
-                    "size_str": "0 KB",
-                    "created_at": "-",
-                    "page_url": str(request.url)
-                }, status_code=404)
-
-            item = dict(row)
-            
-            # 格式化文件大小
-            size_bytes = item.get("size", 0)
-            if size_bytes < 1024:
-                size_str = f"{size_bytes} B"
-            elif size_bytes < 1024 * 1024:
-                size_str = f"{size_bytes / 1024:.1f} KB"
-            else:
-                size_str = f"{size_bytes / 1024 / 1024:.1f} MB"
-
+        # 尝试匹配 hash 或 filename
+        c.execute("SELECT * FROM history WHERE hash = ? OR filename = ?", (image_identifier, image_identifier))
+        row = c.fetchone()
+        
+        if not row:
             return templates.TemplateResponse("view.html", {
                 "request": request,
-                "filename": item.get("filename"),
-                "raw_url": item.get("url"),
-                "width": item.get("width"),
-                "height": item.get("height"),
-                "size_str": size_str,
-                "created_at": item.get("created_at"),
+                "filename": "404 Not Found",
+                "raw_url": "/static/404.png",
+                "width": 0,
+                "height": 0,
+                "size_str": "0 KB",
+                "created_at": "-",
                 "page_url": str(request.url)
-            })
+            }, status_code=404)
+
+        item = dict(row)
+        
+        # 格式化文件大小
+        size_bytes = item.get("size", 0)
+        if size_bytes < 1024:
+            size_str = f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            size_str = f"{size_bytes / 1024:.1f} KB"
+        else:
+            size_str = f"{size_bytes / 1024 / 1024:.1f} MB"
+
+        return templates.TemplateResponse("view.html", {
+            "request": request,
+            "filename": item.get("filename"),
+            "raw_url": item.get("url"),
+            "width": item.get("width"),
+            "height": item.get("height"),
+            "size_str": size_str,
+            "created_at": item.get("created_at"),
+            "page_url": str(request.url)
+        })
 
     except Exception as e:
         logger.error(f"❌ [MyCloud] 渲染落地页失败: {e}")

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # backend/db/sessions.py
 # 会话管理数据库操作 - 喵～这里是设备管理的大本营
 

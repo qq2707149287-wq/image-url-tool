@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from pydantic import BaseModel
 from typing import List
 
@@ -86,3 +87,12 @@ class BatchResolveReports(BaseModel):
 class BatchDeleteImages(BaseModel):
     """批量删除图片的请求体"""
     hashes: List[str]
+
+class AdminPromoteUser(BaseModel):
+    is_admin: bool
+
+class AdminResetPassword(BaseModel):
+    new_password: str
+
+class AdminBanUser(BaseModel):
+    reason: str = "Violation of terms"

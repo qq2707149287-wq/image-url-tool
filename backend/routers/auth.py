@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import logging
 import uuid
@@ -11,6 +12,9 @@ from jose import JWTError, jwt
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
+from ..limiter import limiter
+
+
 from .. import database
 from .. import schemas
 from .. import email_utils
@@ -20,7 +24,12 @@ from ..config import (
     JWT_ALGORITHM as ALGORITHM, 
     ACCESS_TOKEN_EXPIRE_MINUTES,
     GOOGLE_CLIENT_ID,
-    BCRYPT_ROUNDS
+    BCRYPT_ROUNDS,
+    VERIFICATION_CODE_LENGTH,
+    VERIFICATION_CODE_EXPIRY_MINUTES,
+    DEBUG_CAPTCHA_CODE,
+    SHORT_TOKEN_EXPIRE_MINUTES,
+    VIP_LINK_EXPIRE_DAYS
 )
 
 # 设置日志记录器
@@ -107,6 +116,7 @@ async def get_auth_config():
     }
 
 @router.post("/register", response_model=schemas.Token)
+@limiter.limit("5/minute")
 async def register(request: Request, user: schemas.UserCreate):
     """
     用户注册接口
@@ -121,7 +131,7 @@ async def register(request: Request, user: schemas.UserCreate):
     from ..global_state import SYSTEM_SETTINGS
     
     bypass = False
-    if SYSTEM_SETTINGS.get("debug_mode") and user.captcha_code == "abcd":
+    if SYSTEM_SETTINGS.get("debug_mode") and user.captcha_code == DEBUG_CAPTCHA_CODE:
         bypass = True
         logger.info(f"🔧 [Debug] Skipping Captcha for user: {user.username}")
         
@@ -161,6 +171,7 @@ async def register(request: Request, user: schemas.UserCreate):
         raise HTTPException(status_code=500, detail="Register failed")
 
 @router.post("/login", response_model=schemas.Token)
+@limiter.limit("10/minute")
 async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), remember_me: bool = True):
     """
     用户登录接口 (OAuth2 兼容)
@@ -206,7 +217,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
             detail=f"Login Error: {str(e)}"
         )
     
-    expires_minutes = ACCESS_TOKEN_EXPIRE_MINUTES if remember_me else 60 * 24
+    expires_minutes = ACCESS_TOKEN_EXPIRE_MINUTES if remember_me else SHORT_TOKEN_EXPIRE_MINUTES
     access_token_expires = timedelta(minutes=expires_minutes)
 
     # 创建会话
@@ -348,7 +359,8 @@ async def google_callback(req_obj: Request, credential: str = Form(...), g_csrf_
         return f"<html><body><p>登录失败: {str(e)}</p><a href='/'>返回首页</a></body></html>"
 
 @router.post("/send-code")
-async def send_verification_code(request: schemas.SendCodeRequest):
+@limiter.limit("1/minute")
+async def send_verification_code(request: Request, data: schemas.SendCodeRequest):
     """
     发送邮箱验证码 API
     
@@ -356,14 +368,14 @@ async def send_verification_code(request: schemas.SendCodeRequest):
     - register: 注册验证码 (检查邮箱是否已注册)
     - reset: 重置密码验证码 (检查邮箱是否存在)
     """
-    email = request.email
-    code_type = request.type
+    email = data.email
+    code_type = data.type
     
     if code_type not in ["register", "reset"]:
         raise HTTPException(status_code=400, detail="Invalid code type")
 
-    code = ''.join(random.choices(string.digits, k=6))
-    expires_at = datetime.now() + timedelta(minutes=10)
+    code = ''.join(random.choices(string.digits, k=VERIFICATION_CODE_LENGTH))
+    expires_at = datetime.now() + timedelta(minutes=VERIFICATION_CODE_EXPIRY_MINUTES)
     
     if not database.save_verification_code(email, code, code_type, expires_at):
          raise HTTPException(status_code=500, detail="Failed to save verification code")
@@ -400,7 +412,7 @@ async def register_email(req_obj: Request, request: schemas.EmailRegisterRequest
     from ..global_state import SYSTEM_SETTINGS
     
     bypass = False
-    if SYSTEM_SETTINGS.get("debug_mode") and request.captcha_code == "abcd":
+    if SYSTEM_SETTINGS.get("debug_mode") and request.captcha_code == DEBUG_CAPTCHA_CODE:
         bypass = True
         logger.info(f"🔧 [Debug] Skipping Captcha for email register: {request.username}")
         
@@ -473,7 +485,7 @@ async def sign_url(
         raise HTTPException(status_code=403, detail="此功能仅限 VIP 用户使用")
 
     # 默认有效期 1 年 (VIP 特权)
-    expires = int((datetime.utcnow() + timedelta(days=365)).timestamp())
+    expires = int((datetime.utcnow() + timedelta(days=VIP_LINK_EXPIRE_DAYS)).timestamp())
     sig = security.generate_url_signature(req.object_name, expires)
     
     signed_url = f"/mycloud/{req.object_name}?token={sig}&expires={expires}"

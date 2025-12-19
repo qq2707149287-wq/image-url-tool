@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # backend/db/notifications.py
 # 通知系统数据库操作 - 喵～这里是消息通知的大本营
 

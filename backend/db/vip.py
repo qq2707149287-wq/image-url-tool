@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # backend/db/vip.py
 # VIP 系统数据库操作 - 喵～这里是 VIP 大本营
 

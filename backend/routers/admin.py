@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
 from .. import database, schemas
@@ -134,3 +135,61 @@ async def batch_delete_images(
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Batch delete failed"))
     return result
+
+
+# ==================== 用户管理接口 (Stage 5) ====================
+
+@router.get("/users")
+async def get_users(
+    page: int = 1, 
+    page_size: int = 20, 
+    search: Optional[str] = None,
+    current_user: dict = Depends(get_current_admin)
+):
+    """获取用户列表"""
+    return database.get_all_users(page, page_size, search)
+
+@router.post("/users/{user_id}/promote")
+async def promote_user(
+    user_id: int, 
+    data: schemas.AdminPromoteUser, 
+    current_user: dict = Depends(get_current_admin)
+):
+    """提权/降权用户"""
+    # 不能取消自己的管理员权限
+    if user_id == current_user['id'] and not data.is_admin:
+        raise HTTPException(status_code=400, detail="不能取消自己的管理员权限")
+        
+    success = database.promote_user_to_admin(user_id, data.is_admin)
+    if not success:
+        raise HTTPException(status_code=500, detail="Operation failed")
+    return {"success": True}
+
+@router.post("/users/{user_id}/reset-password")
+async def admin_reset_password(
+    user_id: int, 
+    data: schemas.AdminResetPassword, 
+    current_user: dict = Depends(get_current_admin)
+):
+    """强制重置用户密码"""
+    from .auth import get_password_hash
+    hashed = get_password_hash(data.new_password)
+    success = database.reset_user_password_by_admin(user_id, hashed)
+    if not success:
+        raise HTTPException(status_code=500, detail="Operation failed")
+    return {"success": True}
+
+@router.post("/users/{user_id}/ban")
+async def ban_user_endpoint(
+    user_id: int, 
+    data: schemas.AdminBanUser, 
+    current_user: dict = Depends(get_current_admin)
+):
+    """封禁用户 (踢出登录状态)"""
+    if user_id == current_user['id']:
+        raise HTTPException(status_code=400, detail="不能封禁自己")
+        
+    success = database.ban_user(user_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Operation failed")
+    return {"success": True}

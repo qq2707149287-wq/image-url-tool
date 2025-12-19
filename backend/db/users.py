@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # backend/db/users.py
 # 用户相关数据库操作 - 喵～这里是用户管理的大本营
 

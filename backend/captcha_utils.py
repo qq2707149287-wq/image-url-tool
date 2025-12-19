@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # captcha_utils.py - 图形验证码生成和验证
 # 使用 captcha 库生成图片验证码，无需外部服务
 
