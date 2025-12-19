@@ -135,12 +135,12 @@ def delete_from_minio(object_name: str) -> bool:
     """
     s3 = get_s3_client()
     if not s3:
-        logger.error("MinIO client not initialized")
+        logger.error("❌ [MyCloud] MinIO 客户端未初始化")
         return False
 
     try:
         s3.delete_object(Bucket=MINIO_BUCKET_NAME, Key=object_name)
         return True
     except Exception as e:
-        logger.error(f"❌ Delete from MinIO failed: {e}")
+        logger.error(f"❌ [MyCloud] MinIO 删除失败: {e}")
         return False

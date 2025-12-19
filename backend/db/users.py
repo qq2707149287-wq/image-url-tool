@@ -14,9 +14,9 @@ def create_user(username: str, password_hash: str) -> bool:
     """创建新用户"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
             return True
     except sqlite3.IntegrityError:
         return False  # 用户名已存在
@@ -60,10 +60,10 @@ def create_google_user(username: str, google_id: str, avatar: str) -> bool:
     """创建 Google 用户 (无需密码)"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("INSERT INTO users (username, password_hash, google_id, avatar) VALUES (?, ?, ?, ?)", 
-                      (username, "GOOGLE_LOGIN", google_id, avatar))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO users (username, password_hash, google_id, avatar) VALUES (?, ?, ?, ?)", 
+                          (username, "GOOGLE_LOGIN", google_id, avatar))
             return True
     except Exception as e:
         logger.error(f"Create google user failed: {e}")
@@ -90,10 +90,10 @@ def save_verification_code(email: str, code: str, type: str, expires_at: datetim
     """保存验证码"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("DELETE FROM verification_codes WHERE email=? AND type=?", (email, type))
-            c.execute("INSERT INTO verification_codes (email, code, type, expires_at) VALUES (?, ?, ?, ?)", (email, code, type, expires_at))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("DELETE FROM verification_codes WHERE email=? AND type=?", (email, type))
+                c.execute("INSERT INTO verification_codes (email, code, type, expires_at) VALUES (?, ?, ?, ?)", (email, code, type, expires_at))
             return True
     except Exception as e:
         logger.error(f"Save verification code failed: {e}")
@@ -118,9 +118,9 @@ def delete_verification_code(email: str, type: str) -> bool:
     """删除已使用的验证码"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("DELETE FROM verification_codes WHERE email=? AND type=?", (email, type))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("DELETE FROM verification_codes WHERE email=? AND type=?", (email, type))
             return True
     except Exception as e:
         logger.error(f"Delete verification code failed: {e}")
@@ -131,9 +131,9 @@ def update_user_password(email: str, hashed_password: str) -> bool:
     """通过邮箱更新密码"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("UPDATE users SET password_hash=? WHERE email=?", (hashed_password, email))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("UPDATE users SET password_hash=? WHERE email=?", (hashed_password, email))
             return True
     except Exception as e:
         logger.error(f"Update password failed: {e}")
@@ -144,9 +144,9 @@ def create_email_user(username: str, email: str, password_hash: str) -> bool:
     """创建邮箱用户"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)", (username, email, password_hash))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)", (username, email, password_hash))
             return True
     except sqlite3.IntegrityError:
         return False
@@ -156,9 +156,9 @@ def update_user_password_by_id(user_id: int, hashed_password: str) -> bool:
     """通过用户ID更新密码"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("UPDATE users SET password_hash=? WHERE id=?", (hashed_password, user_id))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("UPDATE users SET password_hash=? WHERE id=?", (hashed_password, user_id))
             return True
     except Exception as e:
         logger.error(f"Update password by ID failed: {e}")
@@ -169,9 +169,9 @@ def update_username(user_id: int, new_username: str) -> bool:
     """更新用户名"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("UPDATE users SET username=? WHERE id=?", (new_username, user_id))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("UPDATE users SET username=? WHERE id=?", (new_username, user_id))
             return True
     except Exception as e:
         logger.error(f"Update username failed: {e}")
@@ -182,9 +182,9 @@ def delete_user(user_id: int) -> bool:
     """删除用户"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("DELETE FROM users WHERE id=?", (user_id,))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("DELETE FROM users WHERE id=?", (user_id,))
             return True
     except Exception as e:
         logger.error(f"Delete user failed: {e}")
@@ -195,9 +195,9 @@ def delete_user_history(user_id: int) -> bool:
     """删除用户所有历史记录"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("DELETE FROM history WHERE user_id=?", (user_id,))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("DELETE FROM history WHERE user_id=?", (user_id,))
             return True
     except Exception as e:
         logger.error(f"Delete user history failed: {e}")
@@ -228,10 +228,10 @@ def log_user_activity(user_id: int, action: str, ip_address: str = None, user_ag
     """记录用户活动"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("INSERT INTO user_logs (user_id, action, ip_address, user_agent) VALUES (?, ?, ?, ?)",
-                      (user_id, action, ip_address, user_agent))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO user_logs (user_id, action, ip_address, user_agent) VALUES (?, ?, ?, ?)",
+                          (user_id, action, ip_address, user_agent))
             return True
     except Exception as e:
         logger.error(f"Log user activity failed: {e}")
@@ -255,9 +255,9 @@ def set_user_vip(username: str, is_vip: bool) -> bool:
     """设置用户 VIP 状态"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("UPDATE users SET is_vip=? WHERE username=?", (1 if is_vip else 0, username))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("UPDATE users SET is_vip=? WHERE username=?", (1 if is_vip else 0, username))
             return True
     except Exception as e:
         logger.error(f"Set user VIP failed: {e}")
@@ -268,9 +268,9 @@ def set_user_admin(username: str, is_admin: bool) -> bool:
     """设置用户管理员状态"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("UPDATE users SET is_admin=? WHERE username=?", (1 if is_admin else 0, username))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("UPDATE users SET is_admin=? WHERE username=?", (1 if is_admin else 0, username))
             return True
     except Exception as e:
         logger.error(f"Set user admin failed: {e}")

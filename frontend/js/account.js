@@ -38,46 +38,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (callback) callback(values, function () { });
     }
 
-    // ==================== VIP 激活 ====================
-    if (activateVipBtn) {
-        activateVipBtn.onclick = function () {
-            showInputModal(
-                "💎 激活 VIP",
-                "请输入您的 VIP 激活码:",
-                [{ id: "vip_code", placeholder: "XXXX-XXXX-XXXX-XXXX" }],
-                async function (values, close) {
-                    var code = values.vip_code;
-                    if (!code || code.trim() === "") {
-                        alert("请输入激活码");
-                        return;
-                    }
-
-                    try {
-                        var res = await fetch("/auth/vip/activate", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Authorization": "Bearer " + getToken()
-                            },
-                            body: JSON.stringify({ code: code.trim() })
-                        });
-                        var data = await res.json();
-
-                        if (res.ok) {
-                            if (window.showToast) window.showToast("VIP 激活成功！有效期至: " + data.expiry, "success");
-                            if (typeof checkLoginStatus === 'function') checkLoginStatus();
-                            close();
-                        } else {
-                            alert(data.detail || "激活失败");
-                        }
-                    } catch (e) {
-                        console.error(e);
-                        alert("网络错误");
-                    }
-                }
-            );
-        };
-    }
+    // [已移动] VIP 激活逻辑已移动至 vip.js
 
     // ==================== 修改用户名 ====================
     if (changeUsernameBtn) {
@@ -209,4 +170,39 @@ document.addEventListener("DOMContentLoaded", function () {
             );
         };
     }
+    // ==================== 用户统计 ====================
+    window.loadUserStats = async function () {
+        var token = getToken();
+        if (!token) return;
+        var userEmailDisplay = document.getElementById("userEmailDisplay");
+        var userStatsDisplay = document.getElementById("userStatsDisplay");
+
+        try {
+            var res = await fetch("/auth/user-stats", {
+                headers: { "Authorization": "Bearer " + token }
+            });
+            if (res.ok) {
+                var stats = await res.json();
+                // 显示邮箱（部分隐藏）
+                if (stats.email && userEmailDisplay) {
+                    var email = stats.email;
+                    var parts = email.split("@");
+                    if (parts[0].length > 3) {
+                        var masked = parts[0].substring(0, 2) + "****" + parts[0].slice(-1) + "@" + parts[1];
+                        userEmailDisplay.innerText = "📧 " + masked;
+                    } else {
+                        userEmailDisplay.innerText = "📧 " + email;
+                    }
+                }
+                // 显示统计
+                if (userStatsDisplay) {
+                    var info = "已上传 " + stats.upload_count + " 张图片";
+                    var vipInfo = stats.is_vip ? ("VIP到期: " + (stats.vip_expiry ? stats.vip_expiry.split("T")[0] : "无限期")) : "普通用户";
+                    userStatsDisplay.innerHTML = `注册: ${stats.created_at.split("T")[0]} | 上传: ${stats.upload_count} | ${vipInfo}`;
+                }
+            }
+        } catch (e) {
+            console.error("加载统计失败", e);
+        }
+    };
 });

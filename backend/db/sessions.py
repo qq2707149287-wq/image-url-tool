@@ -15,10 +15,10 @@ def create_session(user_id: int, device_info: str = None, ip_address: str = None
     try:
         session_id = str(uuid.uuid4())
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("INSERT INTO user_sessions (user_id, session_id, device_info, ip_address) VALUES (?, ?, ?, ?)",
-                      (user_id, session_id, device_info, ip_address))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO user_sessions (user_id, session_id, device_info, ip_address) VALUES (?, ?, ?, ?)",
+                          (user_id, session_id, device_info, ip_address))
             return session_id
     except Exception as e:
         logger.error(f"Create session failed: {e}")
@@ -42,9 +42,9 @@ def revoke_session(session_id: str, user_id: int) -> bool:
     """注销会话"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("DELETE FROM user_sessions WHERE session_id=? AND user_id=?", (session_id, user_id))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("DELETE FROM user_sessions WHERE session_id=? AND user_id=?", (session_id, user_id))
             return c.rowcount > 0
     except Exception as e:
         logger.error(f"Revoke session failed: {e}")
@@ -69,9 +69,9 @@ def update_session_activity(session_id: str) -> bool:
     """更新会话最后活跃时间"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("UPDATE user_sessions SET last_active=CURRENT_TIMESTAMP WHERE session_id=?", (session_id,))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("UPDATE user_sessions SET last_active=CURRENT_TIMESTAMP WHERE session_id=?", (session_id,))
             return True
     except Exception as e:
         logger.error(f"Update session activity failed: {e}")

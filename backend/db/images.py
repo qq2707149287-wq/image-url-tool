@@ -14,64 +14,64 @@ def save_to_db(file_info: dict, device_id: str = None, user_id: int = None, is_s
     """保存图片元数据到数据库"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            
-            data = file_info
-            
-            # 去重逻辑
-            conditions = ["hash = ?"]
-            params = [data.get("hash")]
-            
-            if is_shared:
-                conditions.append("is_shared = 1")
-            else:
-                conditions.append("is_shared = 0")
-                if user_id:
-                    conditions.append("user_id = ?")
-                    params.append(user_id)
+            with conn:
+                c = conn.cursor()
+                
+                data = file_info
+                
+                # 去重逻辑
+                conditions = ["hash = ?"]
+                params = [data.get("hash")]
+                
+                if is_shared:
+                    conditions.append("is_shared = 1")
                 else:
-                    conditions.append("device_id = ?")
-                    params.append(device_id)
+                    conditions.append("is_shared = 0")
+                    if user_id:
+                        conditions.append("user_id = ?")
+                        params.append(user_id)
+                    else:
+                        conditions.append("device_id = ?")
+                        params.append(device_id)
 
-            query = "SELECT id FROM history WHERE " + " AND ".join(conditions)
-            c.execute(query, params)
-            row = c.fetchone()
-            row_id = row[0] if row else None
-            
-            if row_id:
-                # 已存在 -> 更新
-                update_fields = '''UPDATE history SET url=?, filename=?, service=?, width=?, height=?, size=?, content_type=?, 
-                                     created_at=CURRENT_TIMESTAMP'''
-                params = [data.get("url"), data.get("filename"), data.get("service"),
-                          data.get("width"), data.get("height"), data.get("size"), data.get("content_type")]
+                query = "SELECT id FROM history WHERE " + " AND ".join(conditions)
+                c.execute(query, params)
+                row = c.fetchone()
+                row_id = row[0] if row else None
                 
-                # 检查是否需要"认领"
-                should_claim = False
-                if is_shared and user_id:
-                     c.execute("SELECT user_id FROM history WHERE id = ?", (row_id,))
-                     existing_owner = c.fetchone()[0]
-                     if existing_owner is None:
-                         should_claim = True
-                
-                if should_claim:
-                    update_fields += ", user_id=?"
-                    params.append(user_id)
-                    logger.info(f"👑 用户 {user_id} 认领了匿名图片 {data.get('hash')}")
+                if row_id:
+                    # 已存在 -> 更新
+                    update_fields = '''UPDATE history SET url=?, filename=?, service=?, width=?, height=?, size=?, content_type=?, 
+                                         created_at=CURRENT_TIMESTAMP'''
+                    params = [data.get("url"), data.get("filename"), data.get("service"),
+                              data.get("width"), data.get("height"), data.get("size"), data.get("content_type")]
+                    
+                    # 检查是否需要"认领"
+                    should_claim = False
+                    if is_shared and user_id:
+                         c.execute("SELECT user_id FROM history WHERE id = ?", (row_id,))
+                         existing_owner = c.fetchone()[0]
+                         if existing_owner is None:
+                             should_claim = True
+                    
+                    if should_claim:
+                        update_fields += ", user_id=?"
+                        params.append(user_id)
+                        logger.info(f"👑 用户 {user_id} 认领了匿名图片 {data.get('hash')}")
 
-                update_fields += " WHERE id=?"
-                params.append(row_id)
+                    update_fields += " WHERE id=?"
+                    params.append(row_id)
 
-                c.execute(update_fields, params)
-            else:
-                # 不存在 -> 插入新记录
-                c.execute('''INSERT INTO history (url, filename, hash, service, width, height, size, content_type, device_id, user_id, is_shared, ip_address)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                          (data.get("url"), data.get("filename"), data.get("hash"), data.get("service"),
-                           data.get("width"), data.get("height"), data.get("size"), data.get("content_type"),
-                           device_id, user_id, 1 if is_shared else 0, ip_address))
-                row_id = c.lastrowid
+                    c.execute(update_fields, params)
+                else:
+                    # 不存在 -> 插入新记录
+                    c.execute('''INSERT INTO history (url, filename, hash, service, width, height, size, content_type, device_id, user_id, is_shared, ip_address)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                              (data.get("url"), data.get("filename"), data.get("hash"), data.get("service"),
+                               data.get("width"), data.get("height"), data.get("size"), data.get("content_type"),
+                               device_id, user_id, 1 if is_shared else 0, ip_address))
+                    row_id = c.lastrowid
                 
-            conn.commit()
             return {"success": True, "existing": bool(row_id is not None and c.lastrowid is None), "id": row_id}
     except Exception as e:
         logger.error(f"❌ 保存到数据库失败: {e}")
@@ -193,25 +193,25 @@ def delete_history_items(ids: List[int], device_id: str = None, user_id: int = N
             return {"success": True, "count": 0}
 
         with get_db_connection() as conn:
-            c = conn.cursor()
-            placeholders = ','.join('?' * len(ids))
-            
-            query = f"DELETE FROM history WHERE id IN ({placeholders})"
-            params = list(ids)
-            
-            if not is_admin:
-                if user_id:
-                    query += " AND (user_id = ? OR user_id IS NULL)"
-                    params.append(user_id)
-                elif device_id:
-                    query += " AND device_id = ? AND user_id IS NULL"
-                    params.append(device_id)
-                else:
-                     return {"success": False, "error": "Missing auth info"}
+            with conn:
+                c = conn.cursor()
+                placeholders = ','.join('?' * len(ids))
+                
+                query = f"DELETE FROM history WHERE id IN ({placeholders})"
+                params = list(ids)
+                
+                if not is_admin:
+                    if user_id:
+                        query += " AND (user_id = ? OR user_id IS NULL)"
+                        params.append(user_id)
+                    elif device_id:
+                        query += " AND device_id = ? AND user_id IS NULL"
+                        params.append(device_id)
+                    else:
+                         return {"success": False, "error": "Missing auth info"}
 
-            c.execute(query, params)
-            count = c.rowcount
-            conn.commit()
+                c.execute(query, params)
+                count = c.rowcount
             return {"success": True, "count": count}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -221,36 +221,36 @@ def clear_all_history(device_id: str = None, view_mode: str = "private", user_id
     """清空当前模式下的所有历史记录"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            
-            if view_mode == "shared":
-                query = "DELETE FROM history WHERE is_shared = 1"
-                params = []
+            with conn:
+                c = conn.cursor()
                 
-                if not is_admin:
-                    if user_id:
-                         query += " AND (user_id = ? OR user_id IS NULL)"
-                         params.append(user_id)
-                    elif device_id:
-                         query += " AND device_id = ? AND user_id IS NULL"
-                         params.append(device_id)
-                
-                c.execute(query, params)
-            else:
-                query = "DELETE FROM history WHERE is_shared = 0"
-                params = []
+                if view_mode == "shared":
+                    query = "DELETE FROM history WHERE is_shared = 1"
+                    params = []
+                    
+                    if not is_admin:
+                        if user_id:
+                            query += " AND (user_id = ? OR user_id IS NULL)"
+                            params.append(user_id)
+                        elif device_id:
+                             query += " AND device_id = ? AND user_id IS NULL"
+                             params.append(device_id)
+                    
+                    c.execute(query, params)
+                else:
+                    query = "DELETE FROM history WHERE is_shared = 0"
+                    params = []
 
-                if not is_admin:
-                     if user_id:
-                         query += " AND user_id = ?"
-                         params.append(user_id)
-                     else:
-                         query += " AND device_id = ? AND user_id IS NULL"
-                         params.append(device_id)
+                    if not is_admin:
+                         if user_id:
+                             query += " AND user_id = ?"
+                             params.append(user_id)
+                         else:
+                             query += " AND device_id = ? AND user_id IS NULL"
+                             params.append(device_id)
 
-                c.execute(query, params)
+                    c.execute(query, params)
                 
-            conn.commit()
             return {"success": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -260,26 +260,36 @@ def rename_history_item(item_id: int, filename: str, device_id: str = None, user
     """重命名历史记录 (通过 ID)"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            
-            query = "UPDATE history SET filename = ? WHERE id = ?"
-            params = [filename, item_id]
-            
-            if not is_admin:
-                if user_id:
-                     query += " AND (user_id = ? OR user_id IS NULL)"
-                     params.append(user_id)
-                elif device_id:
-                     query += " AND device_id = ? AND user_id IS NULL"
-                     params.append(device_id)
-                else:
-                     return {"success": False, "error": "Missing auth info"}
+            with conn:
+                c = conn.cursor()
+                
+                query = "UPDATE history SET filename = ? WHERE id = ?"
+                params = [filename, item_id]
+                
+                if not is_admin:
+                    if user_id:
+                        query += " AND (user_id = ? OR user_id IS NULL)"
+                        params.append(user_id)
+                    elif device_id:
+                        query += " AND device_id = ? AND user_id IS NULL"
+                        params.append(device_id)
+                    else:
+                        return {"success": False, "error": "Missing auth info"}
 
-            c.execute(query, params)
+                c.execute(query, params)
+                if c.rowcount == 0:
+                    # 如果未找到，抛出异常以触发回滚（尽管select rowcount不会改变数据，但保持逻辑一致）
+                    # 不过这里直接返回错误信息更合适，因为可能只是没找到
+                    # 如果不抛出异常，就不会回滚（虽然也没做修改）
+                    pass
+            
+            # 这里的 check 放在 with block 外面或者里面都可以，因为 rowcount 已经确定
+            # 但是由于 rowcount 检查是在 `execute` 后，如果放在 `exit` 之前，可以更早知道结果
+            # 为了简单，保持原逻辑，只是去掉了 commit
+            
             if c.rowcount == 0:
                  return {"success": False, "error": "Item not found or permission denied"}
-            
-            conn.commit()
+
             return {"success": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -295,18 +305,18 @@ def delete_image_by_hash_system(file_hash: str) -> bool:
     for attempt in range(max_retries):
         try:
             with get_db_connection() as conn:
-                c = conn.cursor()
-                logger.info(f"🗑️ [Database] 尝试删除 Hash 记录: {file_hash} (Attempt {attempt+1})")
-                
-                c.execute("SELECT count(*) FROM history WHERE hash = ?", (file_hash,))
-                count = c.fetchone()[0]
-                if count == 0:
-                    logger.info(f"⚠️ [Database] 要删除的记录不存在(可能已被清理): {file_hash}")
-                    return True
-                
-                c.execute("DELETE FROM history WHERE hash = ?", (file_hash,))
-                rows = c.rowcount
-                conn.commit()
+                with conn:
+                    c = conn.cursor()
+                    logger.info(f"🗑️ [Database] 尝试删除 Hash 记录: {file_hash} (Attempt {attempt+1})")
+                    
+                    c.execute("SELECT count(*) FROM history WHERE hash = ?", (file_hash,))
+                    count = c.fetchone()[0]
+                    if count == 0:
+                        logger.info(f"⚠️ [Database] 要删除的记录不存在(可能已被清理): {file_hash}")
+                        return True
+                    
+                    c.execute("DELETE FROM history WHERE hash = ?", (file_hash,))
+                    rows = c.rowcount
                 
                 if rows > 0:
                     logger.info(f"✅ [Database] 成功删除 {rows} 条记录: {file_hash}")

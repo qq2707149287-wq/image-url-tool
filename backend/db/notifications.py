@@ -15,10 +15,10 @@ def create_notification(user_id: int = None, device_id: str = None,
     """创建用户通知"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("INSERT INTO user_notifications (user_id, device_id, type, title, message) VALUES (?, ?, ?, ?, ?)",
-                      (user_id, device_id, type, title, message))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO user_notifications (user_id, device_id, type, title, message) VALUES (?, ?, ?, ?, ?)",
+                          (user_id, device_id, type, title, message))
             return True
     except Exception as e:
         logger.error(f"Create notification failed: {e}")
@@ -63,9 +63,9 @@ def mark_notification_read(notification_id: int) -> bool:
     """标记通知为已读"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("UPDATE user_notifications SET is_read=1 WHERE id=?", (notification_id,))
-            conn.commit()
+            with conn:
+                c = conn.cursor()
+                c.execute("UPDATE user_notifications SET is_read=1 WHERE id=?", (notification_id,))
             return True
     except Exception as e:
         logger.error(f"Mark notification read failed: {e}")
@@ -76,12 +76,12 @@ def cleanup_old_notifications(days: int = 7) -> int:
     """清理超过指定天数的通知"""
     try:
         with get_db_connection() as conn:
-            c = conn.cursor()
-            cutoff = datetime.now() - timedelta(days=days)
-            c.execute("DELETE FROM user_notifications WHERE created_at < ?", (cutoff,))
-            count = c.rowcount
-            conn.commit()
-            logger.info(f"🧹 清理了 {count} 条过期通知")
+            with conn:
+                c = conn.cursor()
+                cutoff = datetime.now() - timedelta(days=days)
+                c.execute("DELETE FROM user_notifications WHERE created_at < ?", (cutoff,))
+                count = c.rowcount
+                logger.info(f"🧹 清理了 {count} 条过期通知")
             return count
     except Exception as e:
         logger.error(f"Cleanup old notifications failed: {e}")

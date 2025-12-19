@@ -267,8 +267,8 @@ document.addEventListener("DOMContentLoaded", function () {
         // Ensure no overlap
         updateModalLayout();
         // Load stats whenever info is shown
-        if (typeof loadUserStats === 'function') {
-            loadUserStats();
+        if (typeof window.loadUserStats === 'function') {
+            window.loadUserStats();
         }
     }
 
@@ -639,174 +639,11 @@ document.addEventListener("DOMContentLoaded", function () {
         if (window.displayHistory) window.displayHistory();
     }
 
-    // ========== 账号管理功能 ==========
-    var changeUsernameBtn = document.getElementById("changeUsernameBtn");
-    var changePasswordBtn = document.getElementById("changePasswordBtn");
-    var deleteAccountLink = document.getElementById("deleteAccountLink");
-    var userEmailDisplay = document.getElementById("userEmailDisplay");
-    var userStatsDisplay = document.getElementById("userStatsDisplay");
-    var activateVipBtn = document.getElementById("activateVipBtn");
 
-    // VIP 激活
-    if (activateVipBtn) {
-        activateVipBtn.onclick = function () {
-            showInputModal(
-                "💎 激活 VIP",
-                "请输入您的 VIP 激活码:",
-                [{ id: "vip_code", placeholder: "XXXX-XXXX-XXXX-XXXX" }],
-                async (values, close) => {
-                    var code = values.vip_code;
-                    if (!code || code.trim() === "") {
-                        alert("请输入激活码");
-                        return;
-                    }
 
-                    try {
-                        var res = await fetch("/auth/vip/activate", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Authorization": "Bearer " + token
-                            },
-                            body: JSON.stringify({ code: code.trim() })
-                        });
-                        var data = await res.json();
 
-                        if (res.ok) {
-                            if (window.showToast) window.showToast("VIP 激活成功！有效期至: " + data.expiry, "success");
-                            checkLoginStatus(); // 刷新状态
-                            close();
-                        } else {
-                            alert(data.detail || "激活失败");
-                        }
-                    } catch (e) {
-                        console.error(e);
-                        alert("网络错误");
-                    }
-                }
-            );
-        };
-    }
 
-    // [Admin] 上帝视角审计按钮
-    var adminAuditBtn = document.getElementById("adminAuditBtn");
-    if (adminAuditBtn) {
-        adminAuditBtn.onclick = function () {
-            // 1. 关闭设置模态框
-            if (document.getElementById("settingsModal")) {
-                document.getElementById("settingsModal").style.display = "none";
-            }
-            // 2. 切换到历史记录 Tab
-            var tabHistory = document.getElementById("tab-history");
-            if (tabHistory) tabHistory.click();
 
-            // 3. 强制触发 history.js 的加载逻辑 (通过某种全局变量或直接操作)
-            // 这里我们设置一个临时全局标记，history.js 会读取它
-            if (window.forceAdminAuditMode) {
-                window.forceAdminAuditMode();
-            } else {
-                alert("审计功能未就绪，请刷新页面重试");
-            }
-        };
-    }
-
-    // [Admin] 批量生成激活码按钮
-    var generateVipCodesBtn = document.getElementById("generateVipCodesBtn");
-    if (generateVipCodesBtn) {
-        generateVipCodesBtn.onclick = function () {
-            showInputModal(
-                "📥 批量生成激活码",
-                "请输入生成数量和天数:",
-                [
-                    { id: "vip_days", label: "有效期(天)", value: "30", type: "number" },
-                    { id: "vip_count", label: "生成数量(个)", value: "10", type: "number" }
-                ],
-                async (values, close) => {
-                    var days = parseInt(values.vip_days);
-                    var count = parseInt(values.vip_count);
-
-                    if (!days || days <= 0 || !count || count <= 0) {
-                        alert("请输入有效的数字");
-                        return;
-                    }
-
-                    try {
-                        // 使用 Form Data 提交，匹配后端 endpoints
-                        var formData = new FormData();
-                        formData.append("days", days);
-                        formData.append("count", count);
-
-                        var res = await fetch("/admin/vip/generate", {
-                            method: "POST",
-                            headers: {
-                                "Authorization": "Bearer " + token
-                            },
-                            body: formData
-                        });
-                        var data = await res.json();
-
-                        if (res.ok && data.success) {
-                            // 生成成功，弹窗显示结果或者下载文件
-                            var codes = data.codes;
-                            if (codes && codes.length > 0) {
-                                // 创建一个临时文本区域供复制
-                                var codeList = codes.join("\n");
-                                var blob = new Blob([codeList], { type: "text/plain;charset=utf-8" });
-                                var url = URL.createObjectURL(blob);
-                                var a = document.createElement("a");
-                                a.href = url;
-                                a.download = "vip_codes_" + Date.now() + ".txt";
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                                URL.revokeObjectURL(url);
-
-                                if (window.showToast) window.showToast("成功生成 " + codes.length + " 个激活码并已自动下载", "success");
-                            }
-                            close();
-                        } else {
-                            alert(data.detail || "生成失败");
-                        }
-                    } catch (e) {
-                        console.error(e);
-                        alert("网络错误");
-                    }
-                }
-            );
-        };
-    }
-
-    // 加载用户统计信息
-    async function loadUserStats() {
-        if (!token) return;
-        try {
-            var res = await fetch("/auth/user-stats", {
-                headers: { "Authorization": "Bearer " + token }
-            });
-            if (res.ok) {
-                var stats = await res.json();
-                // 显示邮箱（部分隐藏）
-                if (stats.email && userEmailDisplay) {
-                    var email = stats.email;
-                    var parts = email.split("@");
-                    if (parts[0].length > 3) {
-                        var masked = parts[0].substring(0, 2) + "****" + parts[0].slice(-1) + "@" + parts[1];
-                        userEmailDisplay.innerText = "📧 " + masked;
-                    } else {
-                        userEmailDisplay.innerText = "📧 " + email;
-                    }
-                }
-                // 显示统计
-                if (userStatsDisplay) {
-                    var info = "已上传 " + stats.upload_count + " 张图片";
-                    var vipInfo = stats.is_vip ? ("VIP到期: " + stats.vip_expiry.split("T")[0]) : "普通用户";
-                    userStatsDisplay.innerHTML = `注册: ${stats.created_at.split("T")[0]} | 上传: ${stats.upload_count} | ${vipInfo}`;
-                }
-            }
-        } catch (e) {
-            console.error("加载统计失败", e);
-        }
-    }
 
 
     // Generic Input Modal Helper
@@ -870,102 +707,10 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // 修改用户名
-    if (changeUsernameBtn) {
-        changeUsernameBtn.onclick = function () {
-            showInputModal(
-                "修改用户名",
-                "请输入新的用户名 (2-20个字符):",
-                [{ id: "new_username", value: username, placeholder: "新用户名" }],
-                async (values, close) => {
-                    var newName = values.new_username;
-                    if (!newName || newName.trim() === "" || newName === username) {
-                        alert("无效的用户名");
-                        return;
-                    }
 
-                    try {
-                        var res = await fetch("/auth/change-username", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Authorization": "Bearer " + token
-                            },
-                            body: JSON.stringify({ new_username: newName.trim() })
-                        });
-                        var data = await res.json();
-
-                        if (res.ok && data.access_token) {
-                            token = data.access_token;
-                            username = data.username;
-                            localStorage.setItem("token", token);
-                            localStorage.setItem("username", username);
-
-                            if (currentUserDisplay) currentUserDisplay.innerText = username;
-                            if (window.showToast) window.showToast("用户名修改成功", "success");
-                            checkLoginStatus();
-                            close();
-                        } else {
-                            alert(data.detail || "修改失败");
-                        }
-                    } catch (e) {
-                        console.error(e);
-                        alert("网络错误");
-                    }
-                }
-            );
-        };
-    }
 
     // 修改密码
-    if (changePasswordBtn) {
-        changePasswordBtn.onclick = function () {
-            showInputModal(
-                "修改密码",
-                "请填写旧密码和新密码",
-                [
-                    { id: "old_pass", type: "password", placeholder: "旧密码" },
-                    { id: "new_pass", type: "password", placeholder: "新密码 (至少6位)" },
-                    { id: "confirm_pass", type: "password", placeholder: "确认新密码" }
-                ],
-                async (values, close) => {
-                    var oldPass = values.old_pass;
-                    var newPass = values.new_pass;
-                    var confirmPass = values.confirm_pass;
 
-                    if (!oldPass || !newPass || newPass.length < 6) {
-                        alert("密码格式错误");
-                        return;
-                    }
-                    if (newPass !== confirmPass) {
-                        alert("两次新密码不一致");
-                        return;
-                    }
-
-                    try {
-                        var res = await fetch("/auth/change-password", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Authorization": "Bearer " + token
-                            },
-                            body: JSON.stringify({ old_password: oldPass, new_password: newPass })
-                        });
-                        var data = await res.json();
-
-                        if (res.ok) {
-                            if (window.showToast) window.showToast("密码修改成功", "success");
-                            close();
-                        } else {
-                            alert(data.detail || "修改失败");
-                        }
-                    } catch (e) {
-                        console.error(e);
-                        alert("网络错误");
-                    }
-                }
-            );
-        };
-    }
 
 
     // Settings Logic
@@ -1082,153 +827,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
     // 注销账号 - Fixed: Removed native confirm
-    if (deleteAccountLink) {
-        deleteAccountLink.onclick = function () {
-            // 直接显示自定义弹窗，不使用 confirm()
-            showInputModal(
-                "确认注销账号",
-                "此操作不可恢复！请输入 invalid \"DELETE\" 以确认注销:",
-                [{ id: "confirm_text", placeholder: "DELETE" }],
-                async (values, close) => {
-                    if (values.confirm_text !== "DELETE") {
-                        alert("输入错误，取消注销");
-                        return;
-                    }
-                    try {
-                        var res = await fetch("/auth/delete-account", {
-                            method: "DELETE",
-                            headers: { "Authorization": "Bearer " + token }
-                        });
-                        var data = await res.json();
-
-                        if (res.ok) {
-                            if (window.showToast) window.showToast("账号已注销", "info");
-                            handleLogout();
-                            close();
-                        } else {
-                            alert(data.detail || "注销失败");
-                        }
-                    } catch (e) {
-                        console.error(e);
-                        alert("网络错误");
-                    }
-                }
-            );
-        };
-    }
 
 
-    // 设备管理 (原登录日志)
-    var viewSessionsBtn = document.getElementById("viewSessionsBtn");
-    var sessionsModal = document.getElementById("sessionsModal");
-    var sessionsTableBody = document.getElementById("sessionsTableBody");
 
-    function parseJwt(token) {
-        try {
-            var base64Url = token.split('.')[1];
-            var base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            var jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
-            return JSON.parse(jsonPayload);
-        } catch (e) {
-            return {};
-        }
-    }
 
-    if (viewSessionsBtn) {
-        viewSessionsBtn.onclick = async function () {
-            if (!token) return;
-            if (sessionsModal) sessionsModal.style.display = "flex";
-            if (sessionsTableBody) sessionsTableBody.innerHTML = "<tr><td colspan='4' style='padding:10px;text-align:center'>加载中...</td></tr>";
-
-            // Identify current session
-            var payload = parseJwt(token);
-            var currentSid = payload.sid;
-
-            try {
-                var res = await fetch("/auth/sessions", {
-                    headers: { "Authorization": "Bearer " + token }
-                });
-                var sessions = await res.json();
-
-                if (sessionsTableBody) {
-                    sessionsTableBody.innerHTML = "";
-                    if (!sessions || sessions.length === 0) {
-                        sessionsTableBody.innerHTML = "<tr><td colspan='4' style='padding:10px;text-align:center'>无活跃设备</td></tr>";
-                    } else {
-                        sessions.forEach(function (session) {
-                            var tr = document.createElement("tr");
-                            tr.style.borderBottom = "1px solid #eee";
-
-                            var isCurrent = (session.session_id === currentSid);
-                            var ua = session.device_info || "未知设备";
-
-                            // Simple UA parsing
-                            var deviceName = "未知设备";
-                            if (ua.includes("Windows")) deviceName = "🖥️ Windows PC";
-                            else if (ua.includes("Mac")) deviceName = "💻 Mac";
-                            else if (ua.includes("Android")) deviceName = "📱 Android";
-                            else if (ua.includes("iPhone")) deviceName = "📱 iPhone";
-                            else if (ua.includes("Linux")) deviceName = "🐧 Linux";
-                            else deviceName = "🌐 浏览器";
-
-                            if (isCurrent) deviceName += " (当前设备)";
-
-                            var lastActive = session.last_active;
-                            try {
-                                var date = new Date(session.last_active + "Z");
-                                if (!isNaN(date)) lastActive = date.toLocaleString();
-                            } catch (e) { }
-
-                            var actionHtml = "";
-                            if (isCurrent) {
-                                actionHtml = "<span style='color:green;font-size:12px;'>在线</span>";
-                            } else {
-                                actionHtml = `<button class='btn-mini btn-danger' onclick='window.revokeSession("${session.session_id}")'>下线</button>`;
-                            }
-
-                            tr.innerHTML = `
-                                <td style="padding: 8px;">
-                                    <div style="font-weight:bold">${deviceName}</div>
-                                    <div style="font-size:11px;color:#999;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${ua}">${ua}</div>
-                                </td>
-                                <td style="padding: 8px;">${session.ip_address}</td>
-                                <td style="padding: 8px;">${lastActive}</td>
-                                <td style="padding: 8px; text-align: right;">${actionHtml}</td>
-                            `;
-                            sessionsTableBody.appendChild(tr);
-                        });
-                    }
-                }
-            } catch (e) {
-                console.error(e);
-                if (sessionsTableBody) sessionsTableBody.innerHTML = "<tr><td colspan='4' style='padding:10px;text-align:center;color:red'>加载失败</td></tr>";
-            }
-        };
-    }
 
     // Global function for Revoke
-    window.revokeSession = async function (sid) {
-        if (!confirm("确定要强制该设备下线吗？")) return;
 
-        try {
-            var res = await fetch("/auth/sessions/" + sid, {
-                method: "DELETE",
-                headers: { "Authorization": "Bearer " + token }
-            });
-            if (res.ok) {
-                if (window.showToast) window.showToast("已强制下线", "success");
-                // Reload list
-                if (viewSessionsBtn) viewSessionsBtn.click();
-            } else {
-                alert("操作失败");
-            }
-        } catch (e) {
-            console.error(e);
-            alert("网络错误");
-        }
-    };
 
     // ==================== 暴露共享函数到 window 对象 ====================
     // 🔧 让拆分后的模块可以调用这些函数喵~

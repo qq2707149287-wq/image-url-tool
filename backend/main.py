@@ -297,14 +297,14 @@ async def submit_report_api(
 async def debug_reset_upload_count():
     """[DEBUG] 清空今日上传记录，方便测试限额"""
     if not SYSTEM_SETTINGS.get("debug_mode"):
-        raise HTTPException(status_code=403, detail="Debug mode is disabled")
+        raise HTTPException(status_code=403, detail="调试模式已禁用")
     
     try:
         with database.get_db_connection() as conn:
             conn.execute("DELETE FROM history WHERE date(created_at) = date('now', 'localtime')")
             conn.commit()
         logger.info("🔧 [DEBUG] 已重置今日上传记录")
-        return {"success": True, "message": "Today's upload count reset"}
+        return {"success": True, "message": "今日上传计数已重置"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -312,7 +312,7 @@ async def debug_reset_upload_count():
 async def debug_quick_login(request: Request, username: str = "test", password: str = "test"):
     """[DEBUG] 快速登录/注册测试账号"""
     if not SYSTEM_SETTINGS.get("debug_mode"):
-        raise HTTPException(status_code=403, detail="Debug mode is disabled")
+        raise HTTPException(status_code=403, detail="调试模式已禁用")
     
     # 检查用户是否存在，不存在就创建
     user = database.get_user_by_username(username)
@@ -335,7 +335,7 @@ async def debug_quick_login(request: Request, username: str = "test", password: 
 async def debug_toggle_vip(current_user: dict = Depends(get_current_user)):
     """[DEBUG] 快速切换当前用户的 VIP 状态"""
     if not SYSTEM_SETTINGS.get("debug_mode"):
-        raise HTTPException(status_code=403, detail="Debug mode is disabled")
+        raise HTTPException(status_code=403, detail="调试模式已禁用")
     
     try:
         with database.get_db_connection() as conn:

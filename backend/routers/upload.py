@@ -351,7 +351,7 @@ async def view_image_page(request: Request, image_identifier: str):
             })
 
     except Exception as e:
-        logger.error(f"Render landing page failed: {e}")
+        logger.error(f"❌ [MyCloud] 渲染落地页失败: {e}")
         return HTMLResponse(content=f"<h1>Error: {e}</h1>", status_code=500)
 
 from .. import security
