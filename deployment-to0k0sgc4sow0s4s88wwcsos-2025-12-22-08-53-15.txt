@@ -1,0 +1,22 @@
+2025-Dec-22 08:52:00.897675 Starting deployment of qq2707149287-wq/image-url-tool:main to demo.test52dzhp.com.
+2025-Dec-22 08:52:01.718499 Preparing container with helper image: ghcr.io/coollabsio/coolify-helper:1.0.12
+2025-Dec-22 08:52:02.140914 [CMD]: docker stop -t 30 to0k0sgc4sow0s4s88wwcsos
+2025-Dec-22 08:52:02.140914 Error response from daemon: No such container: to0k0sgc4sow0s4s88wwcsos
+2025-Dec-22 08:52:02.588567 [CMD]: docker rm -f to0k0sgc4sow0s4s88wwcsos
+2025-Dec-22 08:52:02.588567 Error response from daemon: No such container: to0k0sgc4sow0s4s88wwcsos
+2025-Dec-22 08:52:04.063095 [CMD]: docker run -d --network coolify --name to0k0sgc4sow0s4s88wwcsos --rm -v /var/run/docker.sock:/var/run/docker.sock ghcr.io/coollabsio/coolify-helper:1.0.12
+2025-Dec-22 08:52:04.063095 8dfccac0b7ba10eb4b57e24a017cfe2c7e5bf0f00c0fabbbd91aea06b6b0a048
+2025-Dec-22 08:52:54.307050 ========================================
+2025-Dec-22 08:52:54.311093 Deployment failed: Command execution failed (exit code 137): docker exec to0k0sgc4sow0s4s88wwcsos bash -c 'GIT_SSH_COMMAND="ssh -o ConnectTimeout=30 -p 22 -o Port=22 -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" git ls-remote https://github.com/qq2707149287-wq/image-url-tool refs/heads/main'
+2025-Dec-22 08:52:54.311093 Error: Command failed with no error output
+2025-Dec-22 08:52:54.314990 Error type: RuntimeException
+2025-Dec-22 08:52:54.318857 Error code: 0
+2025-Dec-22 08:52:54.322711 Location: /var/www/html/app/Traits/ExecuteRemoteCommand.php:243
+2025-Dec-22 08:52:54.326632 Stack trace (first 5 lines):
+2025-Dec-22 08:52:54.330512 #0 /var/www/html/app/Traits/ExecuteRemoteCommand.php(104): App\Jobs\ApplicationDeploymentJob->executeCommandWithProcess()
+2025-Dec-22 08:52:54.334391 #1 /var/www/html/vendor/laravel/framework/src/Illuminate/Collections/Traits/EnumeratesValues.php(271): App\Jobs\ApplicationDeploymentJob->{closure:App\Traits\ExecuteRemoteCommand::execute_remote_command():71}()
+2025-Dec-22 08:52:54.338285 #2 /var/www/html/app/Traits/ExecuteRemoteCommand.php(71): Illuminate\Support\Collection->each()
+2025-Dec-22 08:52:54.342190 #3 /var/www/html/app/Jobs/ApplicationDeploymentJob.php(2123): App\Jobs\ApplicationDeploymentJob->execute_remote_command()
+2025-Dec-22 08:52:54.346102 #4 /var/www/html/app/Jobs/ApplicationDeploymentJob.php(878): App\Jobs\ApplicationDeploymentJob->check_git_if_build_needed()
+2025-Dec-22 08:52:54.350024 ========================================
+2025-Dec-22 08:52:54.354018 Deployment failed. Removing the new version of your application.

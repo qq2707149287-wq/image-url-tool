@@ -36,8 +36,7 @@ from . import storage
 from .limiter import limiter
 from .config import (
     SECRET_KEY, GOOGLE_CLIENT_ID,
-    DEFAULT_PORT, DEFAULT_HOST,
-    DEBUG_MODE
+    DEFAULT_PORT, DEFAULT_HOST
 )
 from .global_state import SYSTEM_SETTINGS
 from .logging_config import setup_logging
@@ -117,11 +116,6 @@ async def lifespan(_app: FastAPI):
     # 1. 初始化数据库
     database.init_db()
     database.create_auto_admin()
-
-    # 1.5 同步调试模式配置
-    SYSTEM_SETTINGS["debug_mode"] = DEBUG_MODE
-    if DEBUG_MODE:
-        logger.info("🔧 Debug Mode 已通过环境变量启用 (Enable Simple Registration)")
     
     # 2. 检查关键配置
     if not SECRET_KEY or SECRET_KEY == "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7":
@@ -167,10 +161,11 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-# 2. CORS 中间件
+# 2. CORS 中间件 (来源白名单可通过 CORS_ALLOWED_ORIGINS 环境变量配置)
+from .config import CORS_ALLOWED_ORIGINS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

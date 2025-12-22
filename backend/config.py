@@ -134,4 +134,13 @@ DEBUG_CAPTCHA_CODE = "abcd"
 SHORT_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1天
 VIP_LINK_EXPIRE_DAYS = 365
 
+# ==================== CORS 跨域配置 ====================
+# 允许的来源列表，用逗号分隔
+# - 开发环境: "*" 允许所有来源
+# - 生产环境: 应配置具体域名，如 "https://example.com,https://api.example.com"
+_cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "*")
+if _cors_origins_str == "*":
+    CORS_ALLOWED_ORIGINS = ["*"]
+else:
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _cors_origins_str.split(",") if origin.strip()]
 

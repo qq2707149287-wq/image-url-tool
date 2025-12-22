@@ -649,8 +649,62 @@ body {
 
 /* ==================== 调试模式样式 ==================== */
 /* 🔧 调试模式下隐藏注册表单中的验证码和邮箱相关字段 */
-body.debug-mode #captchaGroup,
-body.debug-mode #emailGroup,
 body.debug-mode #codeGroup {
     display: none !important;
+}
+
+/* ==================== Toast 通知样式 ==================== */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none; /* 允许点击穿透 */
+}
+
+.toast {
+    background: var(--card-bg);
+    color: var(--text-color);
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    border-left: 4px solid var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 300px;
+    max-width: 450px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    animation: toastSlideIn 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    pointer-events: auto; /* 恢复点击 */
+    border: 1px solid var(--border-color);
+}
+
+.toast.success {
+    border-left-color: var(--success);
+}
+
+.toast.error {
+    border-left-color: var(--danger);
+}
+
+.toast.warning {
+    border-left-color: #f59e0b;
+}
+
+@keyframes toastSlideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }

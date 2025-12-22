@@ -39,9 +39,43 @@ def get_s3_client() -> Optional[Any]:
             aws_secret_access_key=minio_secret_key,
             config=Config(signature_version="s3v4")
         )
+        
+        # [FIX] 确保存储桶存在
+        ensure_bucket_exists(_s3_client, MINIO_BUCKET_NAME)
+        
         # [兼容] 同步更新全局别名
         minio_client = _s3_client
     return _s3_client
+
+def ensure_bucket_exists(s3_client, bucket_name):
+    """确保 MinIO 存储桶存在，如果不存在则创建"""
+    try:
+        s3_client.head_bucket(Bucket=bucket_name)
+    except Exception:
+        try:
+            logger.info(f"Using bucket: {bucket_name}")
+            # 注意: MinIO 创建桶通常不需要 LocationConstraint，但在某些 S3 兼容实现中可能需要
+            s3_client.create_bucket(Bucket=bucket_name)
+            logger.info(f"✅ Created bucket: {bucket_name}")
+            
+            # 设置 Bucket 策略为 public (只读)
+            import json
+            policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {"AWS": "*"},
+                        "Action": ["s3:GetObject"],
+                        "Resource": [f"arn:aws:s3:::{bucket_name}/*"]
+                    }
+                ]
+            }
+            s3_client.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(policy))
+            logger.info(f"🔓 Bucket policy set to public read")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to create bucket {bucket_name}: {e}")
 
 def upload_to_minio(data: bytes, name: str, fhash: str) -> dict[str, Any]:
     """

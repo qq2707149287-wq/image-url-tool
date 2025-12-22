@@ -25,30 +25,63 @@ def send_email_sync(subject: str, email_to: str, html_body: str):
     """
     同步发送邮件（使用 smtplib）
     自动根据端口选择 SSL 或 STARTTLS 模式
+
+    注意: QQ 邮箱服务器在断开连接时可能返回非标准响应,
+    导致 smtplib 在 __exit__ 时抛出 SMTPResponseException。
+    但如果 sendmail 成功返回,邮件实际上已经发送成功。
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     # 创建邮件
     msg = MIMEMultipart("alternative")
     msg["Subject"] = Header(subject, 'utf-8')
     msg["From"] = formataddr((str(Header(MAIL_FROM_NAME, 'utf-8')), MAIL_FROM))
     msg["To"] = email_to
-    
+
     # 添加 HTML 内容
     html_part = MIMEText(html_body, "html", "utf-8")
     msg.attach(html_part)
-    
+
     context = ssl.create_default_context()
-    
+
     if MAIL_PORT == 465:
         # SSL 模式 (端口 465)
-        with smtplib.SMTP_SSL(MAIL_SERVER, MAIL_PORT, context=context, timeout=30) as server:
+        server = None
+        try:
+            server = smtplib.SMTP_SSL(MAIL_SERVER, MAIL_PORT, context=context, timeout=30)
             server.login(MAIL_USERNAME, MAIL_PASSWORD)
             server.sendmail(MAIL_FROM, [email_to], msg.as_string())
+            logger.info(f"✅ [Email] 邮件发送成功: {email_to}")
+        finally:
+            # 手动关闭连接,忽略 QUIT 命令可能产生的异常
+            # QQ 邮箱服务器有时会在 QUIT 后返回非标准响应
+            if server:
+                try:
+                    server.quit()
+                except smtplib.SMTPResponseException:
+                    # 忽略 QUIT 响应异常,邮件已成功发送
+                    pass
+                except Exception:
+                    # 忽略其他关闭异常
+                    pass
     else:
         # STARTTLS 模式 (端口 587 或其他)
-        with smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=30) as server:
+        server = None
+        try:
+            server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=30)
             server.starttls(context=context)
             server.login(MAIL_USERNAME, MAIL_PASSWORD)
             server.sendmail(MAIL_FROM, [email_to], msg.as_string())
+            logger.info(f"✅ [Email] 邮件发送成功: {email_to}")
+        finally:
+            if server:
+                try:
+                    server.quit()
+                except smtplib.SMTPResponseException:
+                    pass
+                except Exception:
+                    pass
 
 async def send_verification_code(email: str, code: str):
     """发送注册验证码"""
