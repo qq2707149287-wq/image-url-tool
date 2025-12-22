@@ -14,3 +14,4 @@ nudenet==3.4.2
 transformers==4.57.3
 torch==2.9.1
 captcha==0.6.0
+slowapi==0.1.9
