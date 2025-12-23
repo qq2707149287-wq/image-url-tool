@@ -35,7 +35,7 @@ echo "🐾 =========================================="
 # -------------------- 配置区域 --------------------
 CONTAINER_KEYWORD="e0w48c0swgscwooo404wowc8"
 MINIO_ENDPOINT="http://s3.demo.test52dzhp.com"
-MINIO_ACCESS_KEY="VlXXZuYMVduEG9K0"
+MINIO_ACCESS_KEY="VkXXzUYMVduEG9K0"
 MINIO_SECRET_KEY="qn4QL0WwxFLDeWZMuQPrdTh4rawGTUAu"
 MINIO_BUCKET="images"
 

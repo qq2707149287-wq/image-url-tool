@@ -15,7 +15,7 @@ CONTAINER_KEYWORD="e0w48c0swgscwooo404wowc8"
 
 # MinIO 配置 (与 Coolify 环境变量保持一致)
 MINIO_ENDPOINT="http://s3.demo.test52dzhp.com"
-MINIO_ACCESS_KEY="VlXXZuYMVduEG9K0"
+MINIO_ACCESS_KEY="VkXXzUYMVduEG9K0"
 MINIO_SECRET_KEY="qn4QL0WwxFLDeWZMuQPrdTh4rawGTUAu"
 MINIO_BUCKET="images"
 
