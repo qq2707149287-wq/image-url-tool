@@ -54,10 +54,10 @@ fi
 echo "   找到容器: ${CONTAINER_ID}"
 
 # 从容器中复制数据库
-docker cp "${CONTAINER_ID}:/app/data/database.db" "${TODAY_DIR}/database.db"
+docker cp "${CONTAINER_ID}:/app/data/history.db" "${TODAY_DIR}/history.db"
 
-if [ -f "${TODAY_DIR}/database.db" ]; then
-    DB_SIZE=$(du -h "${TODAY_DIR}/database.db" | cut -f1)
+if [ -f "${TODAY_DIR}/history.db" ]; then
+    DB_SIZE=$(du -h "${TODAY_DIR}/history.db" | cut -f1)
     echo "✅ 数据库备份成功！大小: ${DB_SIZE}"
 else
     echo "❌ 数据库备份失败！"

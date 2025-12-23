@@ -22,8 +22,8 @@ if [ ! -d "${BACKUP_PATH}" ]; then
     exit 1
 fi
 
-if [ ! -f "${BACKUP_PATH}/database.db" ]; then
-    echo "❌ 错误: 备份目录中没有找到 database.db"
+if [ ! -f "${BACKUP_PATH}/history.db" ]; then
+    echo "❌ 错误: 备份目录中没有找到 history.db"
     exit 1
 fi
 
@@ -54,7 +54,7 @@ fi
 # docker exec "${CONTAINER_ID}" pkill -STOP uvicorn || true
 
 # 复制数据库到容器
-docker cp "${BACKUP_PATH}/database.db" "${CONTAINER_ID}:/app/data/database.db"
+docker cp "${BACKUP_PATH}/history.db" "${CONTAINER_ID}:/app/data/history.db"
 
 # 恢复写入
 # docker exec "${CONTAINER_ID}" pkill -CONT uvicorn || true
