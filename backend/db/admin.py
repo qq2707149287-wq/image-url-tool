@@ -77,9 +77,9 @@ def get_abuse_reports(page: int = 1, page_size: int = 50, status: str = None) ->
             
             offset = (page - 1) * page_size
             
-            # LEFT JOIN history 表以获取真实的文件名后缀
+            # LEFT JOIN history 表以获取真实的文件名后缀和 URL
             query = """
-                SELECT r.*, h.filename as real_filename 
+                SELECT r.*, h.filename as real_filename, h.url as real_url
                 FROM abuse_reports r
                 LEFT JOIN history h ON r.image_hash = h.hash
             """
