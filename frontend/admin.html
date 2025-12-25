@@ -701,203 +701,195 @@
                 </h2>
             </div>
             <div class="tabs">
-                <button class="tab active" onclick="loadReports('pending')">待处理</button>
-                <button class="tab" onclick="loadReports('resolved')">已处理</button>
-                <button class="tab" onclick="loadReports(null)">全部</button>
-                <!-- 批量操作按钮 -->
-                <div id="reportsBatchActions" style="display:none; margin-left:auto; gap:10px;">
-                    <button class="btn btn-danger" onclick="batchDeleteReportedImages()">🗑️ 批量删除图片</button>
-                    <button class="btn btn-success" onclick="batchResolveReports()">📋 批量处理选中</button>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="selectAllReports" onclick="toggleSelectAllReports()">
+                                </th>
+                                <th>ID</th>
+                                <th>预览</th>
+                                <th>举报原因</th>
+                                <th>联系方式</th>
+                                <th>状态</th>
+                                <th>时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportsTableBody">
+                            <tr>
+                                <td colspan="8" class="loading">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th><input type="checkbox" id="selectAllReports" onclick="toggleSelectAllReports()"></th>
-                            <th>ID</th>
-                            <th>预览</th>
-                            <th>举报原因</th>
-                            <th>联系方式</th>
-                            <th>状态</th>
-                            <th>时间</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="reportsTableBody">
-                        <tr>
-                            <td colspan="8" class="loading">加载中...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
 
-        <!-- 全站图片 -->
-        <div class="section">
-            <div class="section-header">
-                <h2>👁️ 全站图片 (上帝视角)</h2>
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
-                        <input type="checkbox" id="selectAllImages" onclick="toggleSelectAllImages()">
-                        全选
-                    </label>
-                    <div id="imagesBatchActions" style="display:none;">
-                        <button class="btn btn-danger" onclick="batchDeleteImages()">🗑️ 批量删除</button>
+            <!-- 全站图片 -->
+            <div class="section">
+                <div class="section-header">
+                    <h2>👁️ 全站图片 (上帝视角)</h2>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+                            <input type="checkbox" id="selectAllImages" onclick="toggleSelectAllImages()">
+                            全选
+                        </label>
+                        <div id="imagesBatchActions" style="display:none;">
+                            <button class="btn btn-danger" onclick="batchDeleteImages()">🗑️ 批量删除</button>
+                        </div>
+                        <input type="text" id="imageSearchInput" placeholder="搜索文件名/哈希..."
+                            style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; width:200px;">
+                        <button class="btn btn-primary" onclick="loadImages()">搜索</button>
                     </div>
-                    <input type="text" id="imageSearchInput" placeholder="搜索文件名/哈希..."
-                        style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; width:200px;">
-                    <button class="btn btn-primary" onclick="loadImages()">搜索</button>
+
+
+
+                    <!-- 用户管理 - 重置密码模态框 -->
+                    <div class="modal" id="resetPasswordModal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>重置密码</h3>
+                                <button class="modal-close" onclick="closeResetPasswordModal()">×</button>
+                            </div>
+                            <div class="form-group" style="display:flex; flex-direction:column; gap:8px;">
+                                <label>请输入新密码</label>
+                                <input type="password" id="newAdminSetPassword" placeholder="8位以上强密码">
+                                <p style="font-size: 0.8rem; color: var(--text-secondary);">该操作将强制覆盖用户现有密码。</p>
+                            </div>
+                            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+                                <button class="btn btn-secondary" onclick="closeResetPasswordModal()">取消</button>
+                                <button class="btn btn-danger" onclick="confirmResetPassword()">确认修改</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-
-
-                <!-- 用户管理 - 重置密码模态框 -->
-                <div class="modal" id="resetPasswordModal">
+                <!-- VIP 生成模态框 -->
+                <div class="modal" id="generateVipModal">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h3>重置密码</h3>
-                            <button class="modal-close" onclick="closeResetPasswordModal()">×</button>
+                            <h3>生成 VIP 激活码</h3>
+                            <button class="modal-close" onclick="closeGenerateVipModal()">×</button>
                         </div>
-                        <div class="form-group" style="display:flex; flex-direction:column; gap:8px;">
-                            <label>请输入新密码</label>
-                            <input type="password" id="newAdminSetPassword" placeholder="8位以上强密码">
-                            <p style="font-size: 0.8rem; color: var(--text-secondary);">该操作将强制覆盖用户现有密码。</p>
+                        <div class="form-group">
+                            <label>生成数量</label>
+                            <input type="number" id="genVipCount" value="10" min="1" max="100">
+                        </div>
+                        <div class="form-group">
+                            <label>有效期（天）</label>
+                            <input type="number" id="genVipDays" value="30" min="1">
+                        </div>
+                        <div class="form-group" id="generatedCodesConfig" style="display:none;">
+                            <label>生成结果 (请复制保存)</label>
+                            <textarea id="vipResultText" rows="10" readonly style="font-family:monospace;"></textarea>
                         </div>
                         <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
-                            <button class="btn btn-secondary" onclick="closeResetPasswordModal()">取消</button>
-                            <button class="btn btn-danger" onclick="confirmResetPassword()">确认修改</button>
+                            <button class="btn btn-secondary" onclick="closeGenerateVipModal()">关闭</button>
+                            <button class="btn btn-primary" onclick="confirmGenerateVip()" id="generateBtn">立即生成 (Debug
+                                v1)</button>
                         </div>
                     </div>
                 </div>
+                <div class="image-grid" id="imagesGrid">
+                    <div class="loading" style="grid-column:1/-1;">加载中...</div>
+                </div>
+                <div class="pagination" id="imagesPagination"></div>
             </div>
+        </div>
 
-            <!-- VIP 生成模态框 -->
-            <div class="modal" id="generateVipModal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3>生成 VIP 激活码</h3>
-                        <button class="modal-close" onclick="closeGenerateVipModal()">×</button>
-                    </div>
-                    <div class="form-group">
-                        <label>生成数量</label>
-                        <input type="number" id="genVipCount" value="10" min="1" max="100">
-                    </div>
-                    <div class="form-group">
-                        <label>有效期（天）</label>
-                        <input type="number" id="genVipDays" value="30" min="1">
-                    </div>
-                    <div class="form-group" id="generatedCodesConfig" style="display:none;">
-                        <label>生成结果 (请复制保存)</label>
-                        <textarea id="vipResultText" rows="10" readonly style="font-family:monospace;"></textarea>
-                    </div>
-                    <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
-                        <button class="btn btn-secondary" onclick="closeGenerateVipModal()">关闭</button>
-                        <button class="btn btn-primary" onclick="confirmGenerateVip()" id="generateBtn">立即生成 (Debug
-                            v1)</button>
-                    </div>
+        <!-- 图片详情模态框 -->
+        <div class="modal" id="imageDetailModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>图片详情</h3>
+                    <button class="modal-close" onclick="closeImageModal()">×</button>
+                </div>
+                <div id="imageDetailContent">
+                    <!-- 动态填充 -->
                 </div>
             </div>
-            <div class="image-grid" id="imagesGrid">
-                <div class="loading" style="grid-column:1/-1;">加载中...</div>
-            </div>
-            <div class="pagination" id="imagesPagination"></div>
         </div>
-    </div>
 
-    <!-- 图片详情模态框 -->
-    <div class="modal" id="imageDetailModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>图片详情</h3>
-                <button class="modal-close" onclick="closeImageModal()">×</button>
-            </div>
-            <div id="imageDetailContent">
-                <!-- 动态填充 -->
-            </div>
-        </div>
-    </div>
-
-    <!-- 处理举报模态框 -->
-    <div class="modal" id="resolveReportModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>处理举报</h3>
-                <button class="modal-close" onclick="closeResolveModal()">×</button>
-            </div>
-            <div class="form-group">
-                <label>处理备注</label>
-                <textarea id="resolveNotes" placeholder="填写处理结果说明（可选）"></textarea>
-            </div>
-            <div style="display:flex; gap:10px; justify-content:flex-end;">
-                <button class="btn btn-secondary" onclick="closeResolveModal()">取消</button>
-                <button class="btn btn-success" onclick="submitResolve()">标记为已处理</button>
+        <!-- 处理举报模态框 -->
+        <div class="modal" id="resolveReportModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>处理举报</h3>
+                    <button class="modal-close" onclick="closeResolveModal()">×</button>
+                </div>
+                <div class="form-group">
+                    <label>处理备注</label>
+                    <textarea id="resolveNotes" placeholder="填写处理结果说明（可选）"></textarea>
+                </div>
+                <div style="display:flex; gap:10px; justify-content:flex-end;">
+                    <button class="btn btn-secondary" onclick="closeResolveModal()">取消</button>
+                    <button class="btn btn-success" onclick="submitResolve()">标记为已处理</button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <script>
-        const token = localStorage.getItem('token');
-        let currentUserIdToReset = null;
-        let imagesPage = 1;
-        let usersPage = 1;
+        <script>
+            const token = localStorage.getItem('token');
+            let currentUserIdToReset = null;
+            let imagesPage = 1;
+            let usersPage = 1;
 
-        // 页面加载时执行
-        window.addEventListener('DOMContentLoaded', async () => {
-            if (await checkAuth()) {
-                loadStats();
-                loadReports('pending'); // 默认加载待处理
-                loadUsers();   // 加载用户列表
-                loadImages();  // 加载图片列表
-            }
-        });
-
-        // ==================== 用户管理 ====================
-        async function loadUsers(page = 1) {
-            usersPage = page;
-            const tbody = document.getElementById('usersTableBody');
-            const search = document.getElementById('userSearchInput').value.trim();
-            tbody.innerHTML = '<tr><td colspan="8" class="loading">加载中...</td></tr>';
-
-            try {
-                let url = `/admin/users?page=${page}&page_size=20`;
-                if (search) url += `&search=${encodeURIComponent(search)}`;
-
-                const res = await fetch(url, {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                const data = await res.json();
-
-                tbody.innerHTML = '';
-                if (!data.data || data.data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-secondary);">暂无用户</td></tr>';
-                    document.getElementById('usersPagination').innerHTML = '';
-                    return;
+            // 页面加载时执行
+            window.addEventListener('DOMContentLoaded', async () => {
+                if (await checkAuth()) {
+                    loadStats();
+                    loadReports('pending'); // 默认加载待处理
+                    loadUsers();   // 加载用户列表
+                    loadImages();  // 加载图片列表
                 }
+            });
 
-                data.data.forEach(user => {
-                    const row = document.createElement('tr');
+            // ==================== 用户管理 ====================
+            async function loadUsers(page = 1) {
+                usersPage = page;
+                const tbody = document.getElementById('usersTableBody');
+                const search = document.getElementById('userSearchInput').value.trim();
+                tbody.innerHTML = '<tr><td colspan="8" class="loading">加载中...</td></tr>';
 
-                    // 角色标签
-                    let roleBadges = '';
-                    if (user.is_admin) roleBadges += `<span class="badge" style="background:var(--primary-color);">管理员</span> `;
-                    if (user.is_vip) roleBadges += `<span class="badge" style="background:var(--warning-color);">VIP</span>`;
-                    if (!roleBadges) roleBadges = '<span style="color:var(--text-secondary);font-size:0.8rem;">普通用户</span>';
+                try {
+                    let url = `/admin/users?page=${page}&page_size=20`;
+                    if (search) url += `&search=${encodeURIComponent(search)}`;
 
-                    // 操作按钮
-                    let actions = '';
-                    // 提权/降权
-                    if (user.is_admin) {
-                        actions += `<button class="btn btn-sm btn-secondary" onclick="promoteUser(${user.id}, false)">取消管理</button> `;
-                    } else {
-                        actions += `<button class="btn btn-sm btn-primary" onclick="promoteUser(${user.id}, true)">设为管理</button> `;
+                    const res = await fetch(url, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const data = await res.json();
+
+                    tbody.innerHTML = '';
+                    if (!data.data || data.data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-secondary);">暂无用户</td></tr>';
+                        document.getElementById('usersPagination').innerHTML = '';
+                        return;
                     }
 
-                    // 重置密码 & 封禁
-                    actions += `<button class="btn btn-sm btn-secondary" onclick="openResetPasswordModal(${user.id})">改密</button> `;
-                    actions += `<button class="btn btn-sm btn-danger" onclick="banUser(${user.id})">封禁</button>`;
+                    data.data.forEach(user => {
+                        const row = document.createElement('tr');
 
-                    row.innerHTML = `
+                        // 角色标签
+                        let roleBadges = '';
+                        if (user.is_admin) roleBadges += `<span class="badge" style="background:var(--primary-color);">管理员</span> `;
+                        if (user.is_vip) roleBadges += `<span class="badge" style="background:var(--warning-color);">VIP</span>`;
+                        if (!roleBadges) roleBadges = '<span style="color:var(--text-secondary);font-size:0.8rem;">普通用户</span>';
+
+                        // 操作按钮
+                        let actions = '';
+                        // 提权/降权
+                        if (user.is_admin) {
+                            actions += `<button class="btn btn-sm btn-secondary" onclick="promoteUser(${user.id}, false)">取消管理</button> `;
+                        } else {
+                            actions += `<button class="btn btn-sm btn-primary" onclick="promoteUser(${user.id}, true)">设为管理</button> `;
+                        }
+
+                        // 重置密码 & 封禁
+                        actions += `<button class="btn btn-sm btn-secondary" onclick="openResetPasswordModal(${user.id})">改密</button> `;
+                        actions += `<button class="btn btn-sm btn-danger" onclick="banUser(${user.id})">封禁</button>`;
+
+                        row.innerHTML = `
                         <td>#${user.id}</td>
                         <td style="font-weight:600;">${user.username}</td>
                         <td style="color:var(--text-secondary);">${user.email || '-'}</td>
@@ -907,297 +899,295 @@
                         <td>${new Date(user.created_at).toLocaleDateString()}</td>
                         <td style="display:flex; gap:5px; flex-wrap:wrap;">${actions}</td>
                     `;
-                    tbody.appendChild(row);
-                });
+                        tbody.appendChild(row);
+                    });
 
-                // 渲染分页
-                renderPagination(data.total, data.page, data.page_size, 'usersPagination', loadUsers);
-            } catch (e) {
-                console.error(e);
-                tbody.innerHTML = `<tr><td colspan="8" style="color:red; text-align:center;">加载失败: ${e.message}</td></tr>`;
-            }
-        }
-
-        async function promoteUser(userId, isAdmin) {
-            if (!confirm(`确定要将用户 #${userId} ${isAdmin ? '设为管理员' : '取消管理员权限'} 吗？`)) return;
-
-            try {
-                const res = await fetch(`/admin/users/${userId}/promote`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ is_admin: isAdmin })
-                });
-                const result = await res.json();
-                if (result.success) {
-                    alert('操作成功');
-                    loadUsers(usersPage);
-                } else {
-                    alert('操作失败: ' + (result.detail || '未知错误'));
+                    // 渲染分页
+                    renderPagination(data.total, data.page, data.page_size, 'usersPagination', loadUsers);
+                } catch (e) {
+                    console.error(e);
+                    tbody.innerHTML = `<tr><td colspan="8" style="color:red; text-align:center;">加载失败: ${e.message}</td></tr>`;
                 }
-            } catch (e) {
-                alert('请求异常: ' + e.message);
-            }
-        }
-
-        async function banUser(userId) {
-            if (!confirm(`⚠️ 警告：封禁用户将强制注销其所有登录状态。确认封禁用户 #${userId}？`)) return;
-
-            try {
-                const res = await fetch(`/admin/users/${userId}/ban`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ reason: "Admin Action" })
-                });
-                const result = await res.json();
-                if (result.success) {
-                    alert('用户已封禁 (所有 Session 已清理)');
-                    loadUsers(usersPage);
-                } else {
-                    alert('操作失败: ' + (result.detail || '未知错误'));
-                }
-            } catch (e) {
-                alert('请求异常: ' + e.message);
-            }
-        }
-
-        // 密码重置相关
-        function openResetPasswordModal(userId) {
-            currentUserIdToReset = userId;
-            document.getElementById('newAdminSetPassword').value = '';
-            document.getElementById('resetPasswordModal').style.display = 'flex';
-        }
-
-        function closeResetPasswordModal() {
-            document.getElementById('resetPasswordModal').style.display = 'none';
-            currentUserIdToReset = null;
-        }
-
-        async function confirmResetPassword() {
-            if (!currentUserIdToReset) return;
-            const newPwd = document.getElementById('newAdminSetPassword').value.trim();
-            if (!newPwd) {
-                alert('请输入新密码');
-                return;
             }
 
-            try {
-                const res = await fetch(`/admin/users/${currentUserIdToReset}/reset-password`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ new_password: newPwd })
-                });
-                const result = await res.json();
-                if (result.success) {
-                    alert('密码重置成功');
-                    closeResetPasswordModal();
-                } else {
-                    alert('操作失败: ' + (result.detail || '未知错误'));
-                }
-            } catch (e) {
-                alert('请求异常: ' + e.message);
-            }
-        }
+            async function promoteUser(userId, isAdmin) {
+                if (!confirm(`确定要将用户 #${userId} ${isAdmin ? '设为管理员' : '取消管理员权限'} 吗？`)) return;
 
-        // VIP 生成器相关
-        function openGenerateVipModal() {
-            document.getElementById('genVipCount').value = 10;
-            document.getElementById('genVipDays').value = 30;
-            document.getElementById('generatedCodesConfig').style.display = 'none';
-            document.getElementById('generateBtn').style.display = 'block';
-            document.getElementById('generateVipModal').style.display = 'flex';
-        }
-
-        function closeGenerateVipModal() {
-            document.getElementById('generateVipModal').style.display = 'none';
-        }
-
-        async function confirmGenerateVip() {
-            const countInput = document.getElementById('genVipCount').value;
-            const daysInput = document.getElementById('genVipDays').value;
-
-            if (!countInput || !daysInput) return alert('请填写完整数量和有效期');
-
-            // DEBUG: 打印获取到的原始值
-            alert(`[Debug Info]\nCount Input: "${countInput}"\nDays Input: "${daysInput}"\n\n点击确定继续...`);
-
-            const count = parseInt(countInput);
-            const days = parseInt(daysInput);
-
-            if (isNaN(count) || count < 1 || count > 100) return alert('生成数量必须在 1-100 之间');
-            if (isNaN(days) || days < 1) return alert('有效期至少 1 天');
-
-            const btn = document.getElementById('generateBtn');
-            btn.disabled = true;
-            btn.innerText = '生成中...';
-
-            try {
-                const res = await fetch('/admin/vip/generate', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ count: count, days: days })
-                });
-
-                // 处理非 200 响应
-                if (!res.ok) {
-                    const errData = await res.json();
-                    let errMsg = errData.detail || '未知错误';
-                    if (typeof errMsg === 'object') {
-                        errMsg = JSON.stringify(errMsg, null, 2);
+                try {
+                    const res = await fetch(`/admin/users/${userId}/promote`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ is_admin: isAdmin })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('操作成功');
+                        loadUsers(usersPage);
+                    } else {
+                        alert('操作失败: ' + (result.detail || '未知错误'));
                     }
-                    alert('生成失败:\n' + errMsg);
+                } catch (e) {
+                    alert('请求异常: ' + e.message);
+                }
+            }
+
+            async function banUser(userId) {
+                if (!confirm(`⚠️ 警告：封禁用户将强制注销其所有登录状态。确认封禁用户 #${userId}？`)) return;
+
+                try {
+                    const res = await fetch(`/admin/users/${userId}/ban`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ reason: "Admin Action" })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('用户已封禁 (所有 Session 已清理)');
+                        loadUsers(usersPage);
+                    } else {
+                        alert('操作失败: ' + (result.detail || '未知错误'));
+                    }
+                } catch (e) {
+                    alert('请求异常: ' + e.message);
+                }
+            }
+
+            // 密码重置相关
+            function openResetPasswordModal(userId) {
+                currentUserIdToReset = userId;
+                document.getElementById('newAdminSetPassword').value = '';
+                document.getElementById('resetPasswordModal').style.display = 'flex';
+            }
+
+            function closeResetPasswordModal() {
+                document.getElementById('resetPasswordModal').style.display = 'none';
+                currentUserIdToReset = null;
+            }
+
+            async function confirmResetPassword() {
+                if (!currentUserIdToReset) return;
+                const newPwd = document.getElementById('newAdminSetPassword').value.trim();
+                if (!newPwd) {
+                    alert('请输入新密码');
                     return;
                 }
 
-                const result = await res.json();
-
-                if (result.success) {
-                    const textArea = document.getElementById('vipResultText');
-                    textArea.value = `=== ${new Date().toLocaleString()} 生成 (有效期 ${days} 天) ===\n` + result.codes.join('\n');
-                    document.getElementById('generatedCodesConfig').style.display = 'block';
-                    btn.style.display = 'none'; // 隐藏生成按钮防止重复点击，强制关闭或重新打开
-                    alert(`成功生成 ${result.count} 个激活码`);
-                } else {
-                    let detail = result.detail || result.error || '未知错误';
-                    if (typeof detail === 'object') detail = JSON.stringify(detail);
-                    alert('生成失败: ' + detail);
+                try {
+                    const res = await fetch(`/admin/users/${currentUserIdToReset}/reset-password`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ new_password: newPwd })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('密码重置成功');
+                        closeResetPasswordModal();
+                    } else {
+                        alert('操作失败: ' + (result.detail || '未知错误'));
+                    }
+                } catch (e) {
+                    alert('请求异常: ' + e.message);
                 }
-            } catch (e) {
-                alert('请求异常: ' + e.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerText = '立即生成';
-            }
-        }
-
-        // 通用分页渲染器
-        function renderPagination(total, page, pageSize, containerId, loadersFunc) {
-            const container = document.getElementById(containerId);
-            container.innerHTML = '';
-            const totalPages = Math.ceil(total / pageSize);
-
-            if (totalPages <= 1) return;
-
-            const prevBtn = document.createElement('button');
-            prevBtn.className = 'btn btn-sm btn-secondary';
-            prevBtn.innerText = '上一页';
-            prevBtn.disabled = page === 1;
-            prevBtn.onclick = () => loadersFunc(page - 1);
-            container.appendChild(prevBtn);
-
-            const info = document.createElement('span');
-            info.style.fontSize = '0.9rem';
-            info.style.color = 'var(--text-secondary)';
-            info.innerText = ` ${page} / ${totalPages} `;
-            container.appendChild(info);
-
-            const nextBtn = document.createElement('button');
-            nextBtn.className = 'btn btn-sm btn-secondary';
-            nextBtn.innerText = '下一页';
-            nextBtn.disabled = page === totalPages;
-            nextBtn.onclick = () => loadersFunc(page + 1);
-            container.appendChild(nextBtn);
-        }
-
-        // 检查登录状态
-        async function checkAuth() {
-            if (!token) {
-                alert('请先登录管理员账号');
-                window.location.href = '/';
-                return false;
             }
 
-            try {
-                const res = await fetch('/auth/me', {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                const user = await res.json();
+            // VIP 生成器相关
+            function openGenerateVipModal() {
+                document.getElementById('genVipCount').value = 10;
+                document.getElementById('genVipDays').value = 30;
+                document.getElementById('generatedCodesConfig').style.display = 'none';
+                document.getElementById('generateBtn').style.display = 'block';
+                document.getElementById('generateVipModal').style.display = 'flex';
+            }
 
-                if (!res.ok || !user.is_admin) {
-                    alert('需要管理员权限');
+            function closeGenerateVipModal() {
+                document.getElementById('generateVipModal').style.display = 'none';
+            }
+
+            async function confirmGenerateVip() {
+                const countInput = document.getElementById('genVipCount').value;
+                const daysInput = document.getElementById('genVipDays').value;
+
+                if (!countInput || !daysInput) return alert('请填写完整数量和有效期');
+
+                // DEBUG: 打印获取到的原始值
+                alert(`[Debug Info]\nCount Input: "${countInput}"\nDays Input: "${daysInput}"\n\n点击确定继续...`);
+
+                const count = parseInt(countInput);
+                const days = parseInt(daysInput);
+
+                if (isNaN(count) || count < 1 || count > 100) return alert('生成数量必须在 1-100 之间');
+                if (isNaN(days) || days < 1) return alert('有效期至少 1 天');
+
+                const btn = document.getElementById('generateBtn');
+                btn.disabled = true;
+                btn.innerText = '生成中...';
+
+                try {
+                    const res = await fetch('/admin/vip/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ count: count, days: days })
+                    });
+
+                    // 处理非 200 响应
+                    if (!res.ok) {
+                        const errData = await res.json();
+                        let errMsg = errData.detail || '未知错误';
+                        if (typeof errMsg === 'object') {
+                            errMsg = JSON.stringify(errMsg, null, 2);
+                        }
+                        alert('生成失败:\n' + errMsg);
+                        return;
+                    }
+
+                    const result = await res.json();
+
+                    if (result.success) {
+                        const textArea = document.getElementById('vipResultText');
+                        textArea.value = `=== ${new Date().toLocaleString()} 生成 (有效期 ${days} 天) ===\n` + result.codes.join('\n');
+                        document.getElementById('generatedCodesConfig').style.display = 'block';
+                        btn.style.display = 'none'; // 隐藏生成按钮防止重复点击，强制关闭或重新打开
+                        alert(`成功生成 ${result.count} 个激活码`);
+                    } else {
+                        let detail = result.detail || result.error || '未知错误';
+                        if (typeof detail === 'object') detail = JSON.stringify(detail);
+                        alert('生成失败: ' + detail);
+                    }
+                } catch (e) {
+                    alert('请求异常: ' + e.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerText = '立即生成';
+                }
+            }
+
+            // 通用分页渲染器
+            function renderPagination(total, page, pageSize, containerId, loadersFunc) {
+                const container = document.getElementById(containerId);
+                container.innerHTML = '';
+                const totalPages = Math.ceil(total / pageSize);
+
+                if (totalPages <= 1) return;
+
+                const prevBtn = document.createElement('button');
+                prevBtn.className = 'btn btn-sm btn-secondary';
+                prevBtn.innerText = '上一页';
+                prevBtn.disabled = page === 1;
+                prevBtn.onclick = () => loadersFunc(page - 1);
+                container.appendChild(prevBtn);
+
+                const info = document.createElement('span');
+                info.style.fontSize = '0.9rem';
+                info.style.color = 'var(--text-secondary)';
+                info.innerText = ` ${page} / ${totalPages} `;
+                container.appendChild(info);
+
+                const nextBtn = document.createElement('button');
+                nextBtn.className = 'btn btn-sm btn-secondary';
+                nextBtn.innerText = '下一页';
+                nextBtn.disabled = page === totalPages;
+                nextBtn.onclick = () => loadersFunc(page + 1);
+                container.appendChild(nextBtn);
+            }
+
+            // 检查登录状态
+            async function checkAuth() {
+                if (!token) {
+                    alert('请先登录管理员账号');
                     window.location.href = '/';
                     return false;
                 }
 
-                document.getElementById('adminName').innerText = user.username;
-                return true;
-            } catch (e) {
-                console.error(e);
-                window.location.href = '/';
-                return false;
-            }
-        }
+                try {
+                    const res = await fetch('/auth/me', {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const user = await res.json();
 
-        // 加载统计
-        async function loadStats() {
-            try {
-                const res = await fetch('/admin/stats', {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                const data = await res.json();
+                    if (!res.ok || !user.is_admin) {
+                        alert('需要管理员权限');
+                        window.location.href = '/';
+                        return false;
+                    }
 
-                // 更新四个统计卡片
-                document.getElementById('pendingReportsCount').innerText = data.pending_reports ?? '-';
-                document.getElementById('totalImagesCount').innerText = data.total_images ?? '-';
-                document.getElementById('totalUsersCount').innerText = data.total_users ?? '-';
-                document.getElementById('todayUploadsCount').innerText = data.today_uploads ?? '-';
-
-                if (data.pending_reports > 0) {
-                    document.getElementById('reportsBadge').style.display = 'inline';
-                    document.getElementById('reportsBadge').innerText = data.pending_reports;
+                    document.getElementById('adminName').innerText = user.username;
+                    return true;
+                } catch (e) {
+                    console.error(e);
+                    window.location.href = '/';
+                    return false;
                 }
-            } catch (e) {
-                console.error('加载统计失败', e);
             }
-        }
 
-        // 加载举报列表
-        async function loadReports(status) {
-            // 更新 Tab 状态
-            document.querySelectorAll('.tabs .tab').forEach((tab, i) => {
-                const tabStatus = ['pending', 'resolved', null][i];
-                tab.classList.toggle('active',
-                    (status === 'pending' && i === 0) ||
-                    (status === 'resolved' && i === 1) ||
-                    (status === null && i === 2)
-                );
-            });
+            // 加载统计
+            async function loadStats() {
+                try {
+                    const res = await fetch('/admin/stats', {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const data = await res.json();
 
-            const tbody = document.getElementById('reportsTableBody');
-            tbody.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
+                    // 更新四个统计卡片
+                    document.getElementById('pendingReportsCount').innerText = data.pending_reports ?? '-';
+                    document.getElementById('totalImagesCount').innerText = data.total_images ?? '-';
+                    document.getElementById('totalUsersCount').innerText = data.total_users ?? '-';
+                    document.getElementById('todayUploadsCount').innerText = data.today_uploads ?? '-';
 
-            try {
-                let url = '/admin/reports?page=1&page_size=50';
-                if (status) url += '&status=' + status;
+                    if (data.pending_reports > 0) {
+                        document.getElementById('reportsBadge').style.display = 'inline';
+                        document.getElementById('reportsBadge').innerText = data.pending_reports;
+                    }
+                } catch (e) {
+                    console.error('加载统计失败', e);
+                }
+            }
 
-                const res = await fetch(url, {
-                    headers: { 'Authorization': 'Bearer ' + token }
+            // 加载举报列表
+            async function loadReports(status) {
+                // 更新 Tab 状态
+                document.querySelectorAll('.tabs .tab').forEach((tab, i) => {
+                    tab.classList.toggle('active',
+                        (status === 'pending' && i === 0) ||
+                        (status === 'resolved' && i === 1)
+                    );
                 });
-                const data = await res.json();
 
-                if (!data.data || data.data.length === 0) {
-                    tbody.innerHTML = `
+                const tbody = document.getElementById('reportsTableBody');
+                tbody.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
+
+                try {
+                    let url = '/admin/reports?page=1&page_size=50';
+                    if (status) url += '&status=' + status;
+
+                    const res = await fetch(url, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const data = await res.json();
+
+                    if (!data.data || data.data.length === 0) {
+                        tbody.innerHTML = `
                         <tr><td colspan="8">
                             <div class="empty-state">
                                 <div class="empty-state-icon">📭</div>
                                 <p>暂无${status === 'pending' ? '待处理' : ''}举报记录</p>
                             </div>
                         </td></tr>`;
-                    return;
-                }
+                        return;
+                    }
 
-                tbody.innerHTML = data.data.map(r => `
+                    tbody.innerHTML = data.data.map(r => `
                     <tr>
                         <td><input type="checkbox" class="report-checkbox" data-id="${r.id}" data-hash="${r.image_hash}" onchange="updateReportSelection()"></td>
                         <td>#${r.id}</td>
@@ -1219,123 +1209,123 @@
                     </tr >
                 `).join('');
 
-                // 重置全选框状态
-                document.getElementById('selectAllReports').checked = false;
-                updateReportSelection();
-            } catch (e) {
-                console.error('加载举报失败', e);
-                tbody.innerHTML = '<tr><td colspan="8" style="color:red;">加载失败</td></tr>';
+                    // 重置全选框状态
+                    document.getElementById('selectAllReports').checked = false;
+                    updateReportSelection();
+                } catch (e) {
+                    console.error('加载举报失败', e);
+                    tbody.innerHTML = '<tr><td colspan="8" style="color:red;">加载失败</td></tr>';
+                }
             }
-        }
 
-        // 删除举报的图片
-        async function deleteReportedImage(hash, reportId) {
-            if (!confirm('确定删除此图片？此操作不可逆！')) return;
+            // 删除举报的图片
+            async function deleteReportedImage(hash, reportId) {
+                if (!confirm('确定删除此图片？此操作不可逆！')) return;
 
-            try {
-                const res = await fetch('/admin/images/delete', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ hash: hash, reason: '举报处理' })
-                });
-
-                if (res.ok) {
-                    // 同时标记举报为已处理
-                    await fetch(`/ admin / reports / ${reportId}/resolve`, {
+                try {
+                    const res = await fetch('/admin/images/delete', {
                         method: 'POST',
                         headers: {
                             'Authorization': 'Bearer ' + token,
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ notes: '图片已删除' })
+                        body: JSON.stringify({ hash: hash, reason: '举报处理' })
                     });
 
-                    alert('图片已删除');
-                    loadReports('pending');
-                    loadStats();
-                } else {
-                    const data = await res.json();
-                    alert(data.detail || '删除失败');
-                }
-            } catch (e) {
-                console.error(e);
-                alert('操作失败');
-            }
-        }
+                    if (res.ok) {
+                        // 同时标记举报为已处理
+                        await fetch(`/ admin / reports / ${reportId}/resolve`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Bearer ' + token,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ notes: '图片已删除' })
+                        });
 
-        // 标记举报为已处理
-        function openResolveModal(reportId) {
-            currentReportId = reportId;
-            document.getElementById('resolveReportModal').style.display = 'flex';
-        }
-
-        function closeResolveModal() {
-            document.getElementById('resolveReportModal').style.display = 'none';
-            document.getElementById('resolveNotes').value = '';
-            currentReportId = null;
-        }
-
-        async function submitResolve() {
-            if (!currentReportId) return;
-
-            const notes = document.getElementById('resolveNotes').value;
-
-            try {
-                const res = await fetch(`/admin/reports/${currentReportId}/resolve`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ notes: notes })
-                });
-
-                if (res.ok) {
-                    closeResolveModal();
-                    loadReports('pending');
-                    loadStats();
-                } else {
+                        alert('图片已删除');
+                        loadReports('pending');
+                        loadStats();
+                    } else {
+                        const data = await res.json();
+                        alert(data.detail || '删除失败');
+                    }
+                } catch (e) {
+                    console.error(e);
                     alert('操作失败');
                 }
-            } catch (e) {
-                console.error(e);
-                alert('操作失败');
             }
-        }
 
-        // 加载全站图片
-        async function loadImages(page = 1) {
-            imagesPage = page;
-            const grid = document.getElementById('imagesGrid');
-            const keyword = document.getElementById('imageSearchInput').value;
+            // 标记举报为已处理
+            function openResolveModal(reportId) {
+                currentReportId = reportId;
+                document.getElementById('resolveReportModal').style.display = 'flex';
+            }
 
-            grid.innerHTML = '<div class="loading" style="grid-column:1/-1;">加载中...</div>';
+            function closeResolveModal() {
+                document.getElementById('resolveReportModal').style.display = 'none';
+                document.getElementById('resolveNotes').value = '';
+                currentReportId = null;
+            }
 
-            try {
-                let url = `/admin/images?page=${page}&page_size=30`;
-                if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
+            async function submitResolve() {
+                if (!currentReportId) return;
 
-                const res = await fetch(url, {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                const data = await res.json();
+                const notes = document.getElementById('resolveNotes').value;
 
-                if (!data.data || data.data.length === 0) {
-                    grid.innerHTML = `
+                try {
+                    const res = await fetch(`/admin/reports/${currentReportId}/resolve`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ notes: notes })
+                    });
+
+                    if (res.ok) {
+                        closeResolveModal();
+                        loadReports('pending');
+                        loadStats();
+                    } else {
+                        alert('操作失败');
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert('操作失败');
+                }
+            }
+
+            // 加载全站图片
+            async function loadImages(page = 1) {
+                imagesPage = page;
+                const grid = document.getElementById('imagesGrid');
+                const keyword = document.getElementById('imageSearchInput').value;
+
+                grid.innerHTML = '<div class="loading" style="grid-column:1/-1;">加载中...</div>';
+
+                try {
+                    let url = `/admin/images?page=${page}&page_size=30`;
+                    if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
+
+                    const res = await fetch(url, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const data = await res.json();
+
+                    if (!data.data || data.data.length === 0) {
+                        grid.innerHTML = `
                         <div class="empty-state" style="grid-column:1/-1;">
                             <div class="empty-state-icon">📷</div>
                             <p>暂无图片${keyword ? ' (未找到匹配结果)' : ''}</p>
                         </div>`;
-                    return;
-                }
+                        return;
+                    }
 
-                // 更新统计
-                document.getElementById('totalImagesCount').innerText = data.total || '-';
+                    // 更新统计
+                    document.getElementById('totalImagesCount').innerText = data.total || '-';
 
-                grid.innerHTML = data.data.map(img => `
+                    grid.innerHTML = data.data.map(img => `
                     <div class="image-item">
                         <input type="checkbox" class="image-checkbox" data-hash="${img.hash}" 
                             onclick="event.stopPropagation(); updateImageSelection()" 
@@ -1351,32 +1341,32 @@
                     </div>
                 `).join('');
 
-                // 重置全选框状态
-                document.getElementById('selectAllImages').checked = false;
-                updateImageSelection();
+                    // 重置全选框状态
+                    document.getElementById('selectAllImages').checked = false;
+                    updateImageSelection();
 
-                // 分页
-                const totalPages = Math.ceil(data.total / 30);
-                const pagination = document.getElementById('imagesPagination');
-                if (totalPages > 1) {
-                    pagination.innerHTML = `
+                    // 分页
+                    const totalPages = Math.ceil(data.total / 30);
+                    const pagination = document.getElementById('imagesPagination');
+                    if (totalPages > 1) {
+                        pagination.innerHTML = `
                         <button class="btn btn-sm btn-secondary" ${page <= 1 ? 'disabled' : ''} onclick="loadImages(${page - 1})">上一页</button>
                         <span>${page} / ${totalPages}</span>
                         <button class="btn btn-sm btn-secondary" ${page >= totalPages ? 'disabled' : ''} onclick="loadImages(${page + 1})">下一页</button>
                     `;
-                } else {
-                    pagination.innerHTML = '';
+                    } else {
+                        pagination.innerHTML = '';
+                    }
+                } catch (e) {
+                    console.error('加载图片失败', e);
+                    grid.innerHTML = '<div style="grid-column:1/-1;color:red;text-align:center;padding:20px;">加载失败</div>';
                 }
-            } catch (e) {
-                console.error('加载图片失败', e);
-                grid.innerHTML = '<div style="grid-column:1/-1;color:red;text-align:center;padding:20px;">加载失败</div>';
             }
-        }
 
-        // 显示图片详情
-        function showImageDetail(img) {
-            const content = document.getElementById('imageDetailContent');
-            content.innerHTML = `
+            // 显示图片详情
+            function showImageDetail(img) {
+                const content = document.getElementById('imageDetailContent');
+                content.innerHTML = `
                 <img src="${img.url}" style="max-width:100%; max-height:300px; border-radius:8px; margin-bottom:15px;">
                 <p><strong>文件名：</strong>${img.filename || '-'}</p>
                 <p><strong>哈希：</strong>${img.hash || '-'}</p>
@@ -1388,226 +1378,226 @@
                     <button class="btn btn-danger" onclick="deleteImage('${img.hash}'); closeImageModal();">删除图片</button>
                 </div>
             `;
-            document.getElementById('imageDetailModal').style.display = 'flex';
-        }
+                document.getElementById('imageDetailModal').style.display = 'flex';
+            }
 
-        function closeImageModal() {
-            document.getElementById('imageDetailModal').style.display = 'none';
-        }
+            function closeImageModal() {
+                document.getElementById('imageDetailModal').style.display = 'none';
+            }
 
-        // 删除图片
-        async function deleteImage(hash) {
-            if (!confirm('确定删除此图片？')) return;
+            // 删除图片
+            async function deleteImage(hash) {
+                if (!confirm('确定删除此图片？')) return;
 
-            try {
-                const res = await fetch('/admin/images/delete', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ hash: hash, reason: '管理员删除' })
-                });
+                try {
+                    const res = await fetch('/admin/images/delete', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ hash: hash, reason: '管理员删除' })
+                    });
 
-                if (res.ok) {
-                    alert('图片已删除');
-                    loadImages(imagesPage);
-                } else {
-                    const data = await res.json();
-                    alert(data.detail || '删除失败');
+                    if (res.ok) {
+                        alert('图片已删除');
+                        loadImages(imagesPage);
+                    } else {
+                        const data = await res.json();
+                        alert(data.detail || '删除失败');
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert('操作失败');
                 }
-            } catch (e) {
-                console.error(e);
-                alert('操作失败');
-            }
-        }
-
-        // ==================== 举报多选功能 ====================
-
-        function toggleSelectAllReports() {
-            const selectAll = document.getElementById('selectAllReports');
-            const checkboxes = document.querySelectorAll('.report-checkbox');
-            checkboxes.forEach(cb => cb.checked = selectAll.checked);
-            updateReportSelection();
-        }
-
-        function updateReportSelection() {
-            const checkboxes = document.querySelectorAll('.report-checkbox:checked');
-            const batchActions = document.getElementById('reportsBatchActions');
-            if (checkboxes.length > 0) {
-                batchActions.style.display = 'flex';
-                // 更新两个按钮的文字
-                const btns = batchActions.querySelectorAll('button');
-                if (btns[0]) btns[0].innerText = `🗑️ 批量删除图片 (${checkboxes.length})`;
-                if (btns[1]) btns[1].innerText = `📋 批量处理选中 (${checkboxes.length})`;
-            } else {
-                batchActions.style.display = 'none';
-            }
-        }
-
-        async function batchResolveReports() {
-            const checkboxes = document.querySelectorAll('.report-checkbox:checked');
-            const ids = Array.from(checkboxes).map(cb => parseInt(cb.dataset.id));
-
-            if (ids.length === 0) {
-                alert('请先选择要处理的举报');
-                return;
             }
 
-            if (!confirm(`确定批量处理 ${ids.length} 条举报？`)) return;
+            // ==================== 举报多选功能 ====================
 
-            try {
-                const res = await fetch('/admin/reports/batch-resolve', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ ids: ids, notes: '批量处理' })
-                });
+            function toggleSelectAllReports() {
+                const selectAll = document.getElementById('selectAllReports');
+                const checkboxes = document.querySelectorAll('.report-checkbox');
+                checkboxes.forEach(cb => cb.checked = selectAll.checked);
+                updateReportSelection();
+            }
 
-                if (res.ok) {
-                    const result = await res.json();
-                    alert(`成功处理 ${result.resolved_count} 条举报`);
-                    loadReports('pending');
-                    loadStats();
+            function updateReportSelection() {
+                const checkboxes = document.querySelectorAll('.report-checkbox:checked');
+                const batchActions = document.getElementById('reportsBatchActions');
+                if (checkboxes.length > 0) {
+                    batchActions.style.display = 'flex';
+                    // 更新两个按钮的文字
+                    const btns = batchActions.querySelectorAll('button');
+                    if (btns[0]) btns[0].innerText = `🗑️ 批量删除图片 (${checkboxes.length})`;
+                    if (btns[1]) btns[1].innerText = `📋 批量处理选中 (${checkboxes.length})`;
                 } else {
-                    const data = await res.json();
-                    alert(data.detail || '批量处理失败');
+                    batchActions.style.display = 'none';
                 }
-            } catch (e) {
-                console.error(e);
-                alert('操作失败');
-            }
-        }
-
-        async function batchDeleteReportedImages() {
-            const checkboxes = document.querySelectorAll('.report-checkbox:checked');
-            const reports = Array.from(checkboxes).map(cb => ({
-                id: parseInt(cb.dataset.id),
-                hash: cb.dataset.hash
-            }));
-
-            if (reports.length === 0) {
-                alert('请先选择要删除的举报');
-                return;
             }
 
-            // 过滤出有 hash 的记录
-            const hashes = reports.filter(r => r.hash).map(r => r.hash);
-            const ids = reports.map(r => r.id);
+            async function batchResolveReports() {
+                const checkboxes = document.querySelectorAll('.report-checkbox:checked');
+                const ids = Array.from(checkboxes).map(cb => parseInt(cb.dataset.id));
 
-            if (hashes.length === 0) {
-                alert('选中的举报没有关联的图片');
-                return;
-            }
-
-            if (!confirm(`确定批量删除 ${hashes.length} 张被举报的图片？此操作不可逆！`)) return;
-
-            try {
-                // 1. 批量删除图片
-                const del_res = await fetch('/admin/images/batch-delete', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ hashes: hashes })
-                });
-
-                if (!del_res.ok) {
-                    const data = await del_res.json();
-                    alert(data.detail || '删除图片失败');
+                if (ids.length === 0) {
+                    alert('请先选择要处理的举报');
                     return;
                 }
 
-                const del_result = await del_res.json();
+                if (!confirm(`确定批量处理 ${ids.length} 条举报？`)) return;
 
-                // 2. 批量标记举报为已处理
-                await fetch('/admin/reports/batch-resolve', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ ids: ids, notes: '图片已批量删除' })
-                });
+                try {
+                    const res = await fetch('/admin/reports/batch-resolve', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ ids: ids, notes: '批量处理' })
+                    });
 
-                alert(`成功删除 ${del_result.deleted_count} 张图片并处理了 ${ids.length} 条举报`);
-                loadReports('pending');
-                loadStats();
-            } catch (e) {
-                console.error(e);
-                alert('操作失败');
-            }
-        }
-
-        // ==================== 图片多选功能 ====================
-
-        function toggleSelectAllImages() {
-            const selectAll = document.getElementById('selectAllImages');
-            const checkboxes = document.querySelectorAll('.image-checkbox');
-            checkboxes.forEach(cb => cb.checked = selectAll.checked);
-            updateImageSelection();
-        }
-
-        function updateImageSelection() {
-            const checkboxes = document.querySelectorAll('.image-checkbox:checked');
-            const batchActions = document.getElementById('imagesBatchActions');
-            if (checkboxes.length > 0) {
-                batchActions.style.display = 'inline-block';
-                batchActions.querySelector('button').innerText = `🗑️ 批量删除 (${checkboxes.length})`;
-            } else {
-                batchActions.style.display = 'none';
-            }
-        }
-
-        async function batchDeleteImages() {
-            const checkboxes = document.querySelectorAll('.image-checkbox:checked');
-            const hashes = Array.from(checkboxes).map(cb => cb.dataset.hash);
-
-            if (hashes.length === 0) {
-                alert('请先选择要删除的图片');
-                return;
-            }
-
-            if (!confirm(`确定批量删除 ${hashes.length} 张图片？此操作不可逆！`)) return;
-
-            try {
-                const res = await fetch('/admin/images/batch-delete', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ hashes: hashes })
-                });
-
-                if (res.ok) {
-                    const result = await res.json();
-                    alert(`成功删除 ${result.deleted_count} 张图片`);
-                    loadImages(imagesPage);
-                    loadStats();
-                } else {
-                    const data = await res.json();
-                    alert(data.detail || '批量删除失败');
+                    if (res.ok) {
+                        const result = await res.json();
+                        alert(`成功处理 ${result.resolved_count} 条举报`);
+                        loadReports('pending');
+                        loadStats();
+                    } else {
+                        const data = await res.json();
+                        alert(data.detail || '批量处理失败');
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert('操作失败');
                 }
-            } catch (e) {
-                console.error(e);
-                alert('操作失败');
             }
-        }
 
-        // 初始化
-        (async function init() {
-            if (await checkAuth()) {
-                loadStats();
-                loadReports('pending');
-                loadUsers(); // 确保加载用户列表
-                loadImages();
+            async function batchDeleteReportedImages() {
+                const checkboxes = document.querySelectorAll('.report-checkbox:checked');
+                const reports = Array.from(checkboxes).map(cb => ({
+                    id: parseInt(cb.dataset.id),
+                    hash: cb.dataset.hash
+                }));
+
+                if (reports.length === 0) {
+                    alert('请先选择要删除的举报');
+                    return;
+                }
+
+                // 过滤出有 hash 的记录
+                const hashes = reports.filter(r => r.hash).map(r => r.hash);
+                const ids = reports.map(r => r.id);
+
+                if (hashes.length === 0) {
+                    alert('选中的举报没有关联的图片');
+                    return;
+                }
+
+                if (!confirm(`确定批量删除 ${hashes.length} 张被举报的图片？此操作不可逆！`)) return;
+
+                try {
+                    // 1. 批量删除图片
+                    const del_res = await fetch('/admin/images/batch-delete', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ hashes: hashes })
+                    });
+
+                    if (!del_res.ok) {
+                        const data = await del_res.json();
+                        alert(data.detail || '删除图片失败');
+                        return;
+                    }
+
+                    const del_result = await del_res.json();
+
+                    // 2. 批量标记举报为已处理
+                    await fetch('/admin/reports/batch-resolve', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ ids: ids, notes: '图片已批量删除' })
+                    });
+
+                    alert(`成功删除 ${del_result.deleted_count} 张图片并处理了 ${ids.length} 条举报`);
+                    loadReports('pending');
+                    loadStats();
+                } catch (e) {
+                    console.error(e);
+                    alert('操作失败');
+                }
             }
-        })();
-    </script>
+
+            // ==================== 图片多选功能 ====================
+
+            function toggleSelectAllImages() {
+                const selectAll = document.getElementById('selectAllImages');
+                const checkboxes = document.querySelectorAll('.image-checkbox');
+                checkboxes.forEach(cb => cb.checked = selectAll.checked);
+                updateImageSelection();
+            }
+
+            function updateImageSelection() {
+                const checkboxes = document.querySelectorAll('.image-checkbox:checked');
+                const batchActions = document.getElementById('imagesBatchActions');
+                if (checkboxes.length > 0) {
+                    batchActions.style.display = 'inline-block';
+                    batchActions.querySelector('button').innerText = `🗑️ 批量删除 (${checkboxes.length})`;
+                } else {
+                    batchActions.style.display = 'none';
+                }
+            }
+
+            async function batchDeleteImages() {
+                const checkboxes = document.querySelectorAll('.image-checkbox:checked');
+                const hashes = Array.from(checkboxes).map(cb => cb.dataset.hash);
+
+                if (hashes.length === 0) {
+                    alert('请先选择要删除的图片');
+                    return;
+                }
+
+                if (!confirm(`确定批量删除 ${hashes.length} 张图片？此操作不可逆！`)) return;
+
+                try {
+                    const res = await fetch('/admin/images/batch-delete', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ hashes: hashes })
+                    });
+
+                    if (res.ok) {
+                        const result = await res.json();
+                        alert(`成功删除 ${result.deleted_count} 张图片`);
+                        loadImages(imagesPage);
+                        loadStats();
+                    } else {
+                        const data = await res.json();
+                        alert(data.detail || '批量删除失败');
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert('操作失败');
+                }
+            }
+
+            // 初始化
+            (async function init() {
+                if (await checkAuth()) {
+                    loadStats();
+                    loadReports('pending');
+                    loadUsers(); // 确保加载用户列表
+                    loadImages();
+                }
+            })();
+        </script>
 </body>
 
 </html>
