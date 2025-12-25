@@ -845,7 +845,7 @@
         window.addEventListener('DOMContentLoaded', async () => {
             if (await checkAuth()) {
                 loadStats();
-                loadReports(); // 默认加载
+                loadReports('pending'); // 默认加载待处理
                 loadUsers();   // 加载用户列表
                 loadImages();  // 加载图片列表
             }
@@ -1201,7 +1201,7 @@
                         <td><input type="checkbox" class="report-checkbox" data-id="${r.id}" data-hash="${r.image_hash}" onchange="updateReportSelection()"></td>
                         <td>#${r.id}</td>
                         <td>
-                            ${r.image_url ? `<img src="${r.image_url.replace('/view/', '/mycloud/')}" class="image-thumb" onclick="window.open('${r.image_url}')" onerror="this.src='data:image/svg+xml,...'">` : '-'}
+                            ${r.image_hash ? `<img src="/mycloud/${r.image_hash}.png" class="image-thumb" onclick="window.open('/view/${r.image_hash}')" onerror="this.onerror=null;this.src='/mycloud/${r.image_hash}.jpg';this.onerror=()=>{this.style.display='none';this.parentElement.innerHTML='-'}">` : '-'}
                         </td>
                         <td class="reason-text" title="${r.reason}">${r.reason}</td>
                         <td>${r.reporter_contact || '-'}</td>
