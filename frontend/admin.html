@@ -1208,12 +1208,13 @@
                         <td><span class="status-badge status-${r.status}">${r.status === 'pending' ? '待处理' : '已处理'}</span></td>
                         <td>${new Date(r.created_at).toLocaleString()}</td>
                         <td>
-                            ${r.status === 'pending' ? `
+                                <button class="btn btn-sm btn-primary" onclick="window.open('/view/${r.image_hash}')">打开</button>
                                 <button class="btn btn-sm btn-danger" onclick="deleteReportedImage('${r.image_hash}', ${r.id})">删除图片</button>
                                 <button class="btn btn-sm btn-success" onclick="openResolveModal(${r.id})">标记处理</button>
-                            ` : `<span style="color:var(--text-secondary)">已处理</span>`}
-                        </td>
-                    </tr>
+                            ` : `<button class="btn btn-sm btn-primary" onclick="window.open('/view/${r.image_hash}')">打开</button>
+                                 <span style="color:var(--text-secondary)">已处理</span>`}
+                        </td >
+                    </tr >
                 `).join('');
 
                 // 重置全选框状态
@@ -1241,26 +1242,26 @@
 
                 if (res.ok) {
                     // 同时标记举报为已处理
-                    await fetch(`/admin/reports/${reportId}/resolve`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': 'Bearer ' + token,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ notes: '图片已删除' })
-                    });
+                    await fetch(`/ admin / reports / ${ reportId }/resolve`, {
+            method: 'POST',
+                headers: {
+                'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ notes: '图片已删除' })
+        });
 
-                    alert('图片已删除');
-                    loadReports('pending');
-                    loadStats();
+        alert('图片已删除');
+        loadReports('pending');
+        loadStats();
                 } else {
-                    const data = await res.json();
-                    alert(data.detail || '删除失败');
-                }
+            const data = await res.json();
+            alert(data.detail || '删除失败');
+        }
             } catch (e) {
-                console.error(e);
-                alert('操作失败');
-            }
+            console.error(e);
+            alert('操作失败');
+        }
         }
 
         // 标记举报为已处理
@@ -1339,7 +1340,11 @@
                             style="position:absolute; top:10px; left:10px; z-index:10; width:18px; height:18px;">
                         <img src="${img.url}" onclick="showImageDetail(${JSON.stringify(img).replace(/"/g, '&quot;')})" onerror="this.src='data:image/svg+xml,...'">
                         <div class="overlay">
-                            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteImage('${img.hash}')">删除</button>
+                            <span style="color:white; font-size:0.8rem; margin-bottom:5px;">${img.width}x${img.height}</span>
+                            <div style="display:flex; gap:5px;">
+                                <button class="btn btn-sm btn-primary" style="flex:1;" onclick="event.stopPropagation(); window.open('${img.url}')">打开</button>
+                                <button class="btn btn-sm btn-danger" style="flex:1;" onclick="event.stopPropagation(); deleteImage('${img.hash}')">删除</button>
+                            </div>
                         </div>
                     </div>
                 `).join('');
