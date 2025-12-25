@@ -81,6 +81,7 @@ from .admin import (
     promote_user_to_admin,
     reset_user_password_by_admin,
     ban_user,
+    batch_delete_users,
 )
 
 # 导出所有公共接口
@@ -106,6 +107,6 @@ __all__ = [
     # 管理员
     'get_admin_stats', 'create_abuse_report', 'get_abuse_reports', 'resolve_abuse_report',
     'get_pending_reports_count', 'batch_resolve_reports', 'batch_delete_images_by_hashes', 'create_auto_admin',
-    'get_all_users', 'promote_user_to_admin', 'reset_user_password_by_admin', 'ban_user',
+    'get_all_users', 'promote_user_to_admin', 'reset_user_password_by_admin', 'ban_user', 'batch_delete_users',
 ]
 

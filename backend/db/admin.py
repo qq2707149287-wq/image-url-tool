@@ -354,7 +354,5 @@ def batch_delete_users(user_ids: List[int]) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Batch delete users failed: {e}")
         return {"success": False, "error": str(e)}
-    except Exception as e:
-        logger.error(f"Ban user failed: {e}")
-        return False
+
 
