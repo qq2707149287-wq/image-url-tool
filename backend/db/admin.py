@@ -77,14 +77,19 @@ def get_abuse_reports(page: int = 1, page_size: int = 50, status: str = None) ->
             
             offset = (page - 1) * page_size
             
-            query = "SELECT * FROM abuse_reports"
+            # LEFT JOIN history 表以获取真实的文件名后缀
+            query = """
+                SELECT r.*, h.filename as real_filename 
+                FROM abuse_reports r
+                LEFT JOIN history h ON r.image_hash = h.hash
+            """
             params = []
             
             if status:
-                query += " WHERE status = ?"
+                query += " WHERE r.status = ?"
                 params.append(status)
             
-            query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            query += " ORDER BY r.created_at DESC LIMIT ? OFFSET ?"
             params.extend([page_size, offset])
             
             c.execute(query, params)

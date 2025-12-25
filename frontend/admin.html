@@ -1203,7 +1203,12 @@
                         <td><input type="checkbox" class="report-checkbox" data-id="${r.id}" data-hash="${r.image_hash}" onchange="updateReportSelection()"></td>
                         <td>#${r.id}</td>
                         <td>
-                            ${r.image_hash ? `<img src="/mycloud/${r.image_hash}.png" class="image-thumb" onclick="window.open('/view/${r.image_hash}')" onerror="this.onerror=null;this.src='/mycloud/${r.image_hash}.jpg';this.onerror=()=>{this.style.display='none';this.parentElement.innerHTML='-'}">` : '-'}
+                            ${r.real_filename ?
+                        `<img src="/mycloud/${r.real_filename}" class="image-thumb" onclick="window.open('/view/${r.image_hash}')">` :
+                        (r.image_hash ?
+                            `<img src="/mycloud/${r.image_hash}.png" class="image-thumb" onclick="window.open('/view/${r.image_hash}')" onerror="this.onerror=null;this.src='/mycloud/${r.image_hash}.jpg';this.onerror=()=>{this.style.display='none';this.parentElement.innerHTML='-'}">` :
+                            '-')
+                    }
                         </td>
                         <td class="reason-text" title="${r.reason}">${r.reason}</td>
                         <td>${r.reporter_contact || '-'}</td>
