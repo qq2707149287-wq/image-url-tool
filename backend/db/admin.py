@@ -315,3 +315,46 @@ def ban_user(user_id: int) -> bool:
         logger.error(f"Ban user failed: {e}")
         return False
 
+
+def delete_user(user_id: int) -> bool:
+    """物理删除用户 (及其会话)"""
+    try:
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            # 1. 删除会话
+            c.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+            # 2. 删除用户
+            c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            conn.commit()
+            return c.rowcount > 0
+    except Exception as e:
+        logger.error(f"Delete user failed: {e}")
+        return False
+
+
+def batch_delete_users(user_ids: List[int]) -> Dict[str, Any]:
+    """批量删除用户"""
+    try:
+        if not user_ids:
+            return {"success": True, "deleted_count": 0}
+        
+        with get_db_connection() as conn:
+            c = conn.cursor()
+            placeholders = ','.join('?' * len(user_ids))
+            
+            # 1. 批量删除会话
+            c.execute(f"DELETE FROM user_sessions WHERE user_id IN ({placeholders})", user_ids)
+            
+            # 2. 批量删除用户
+            c.execute(f"DELETE FROM users WHERE id IN ({placeholders})", user_ids)
+            count = c.rowcount
+            
+            conn.commit()
+            return {"success": True, "deleted_count": count}
+    except Exception as e:
+        logger.error(f"Batch delete users failed: {e}")
+        return {"success": False, "error": str(e)}
+    except Exception as e:
+        logger.error(f"Ban user failed: {e}")
+        return False
+

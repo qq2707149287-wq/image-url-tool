@@ -96,3 +96,7 @@ class AdminResetPassword(BaseModel):
 
 class AdminBanUser(BaseModel):
     reason: str = "Violation of terms"
+
+class BatchDeleteUsers(BaseModel):
+    """批量删除用户的请求体"""
+    user_ids: List[int]
