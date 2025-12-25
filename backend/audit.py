@@ -305,7 +305,20 @@ def check_image_safety(content: bytes, threshold: float = 0.50) -> dict:
 
     result = {"safe": True, "score": 0.0, "reason": "Pass", "details": {}}
     
-    # --- 0. 地图检测 (已禁用 - 误判率太高) ---
+    # --- 0. 图片尺寸预检查 (跳过极小图片) ---
+    # CLIP 处理极小图片（如 1x1）时会报错，提前跳过
+    try:
+        pre_check_image = Image.open(io.BytesIO(content))
+        img_width, img_height = pre_check_image.size
+        MIN_SIZE = 10  # 最小尺寸阈值
+        if img_width < MIN_SIZE or img_height < MIN_SIZE:
+            logger.info(f"⚠️ [Audit] 跳过极小图片 ({img_width}x{img_height}), 直接放行")
+            return {"safe": True, "score": 0.0, "reason": f"图片过小 ({img_width}x{img_height}), 跳过审核", "details": {}}
+    except Exception as e:
+        logger.warning(f"⚠️ [Audit] 图片预检查失败: {e}")
+        # 预检查失败不阻断流程，继续后续审核
+    
+    # --- 地图检测 (已禁用 - 误判率太高) ---
     # 模板匹配方案无法可靠检测地图，暂时禁用
     # 如需启用，请使用 Vision API 方案
     # try:

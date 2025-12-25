@@ -137,7 +137,7 @@ async def submit_report(
     user_id = current_user.get("id") if current_user else None
     device_id = request.cookies.get(DEVICE_ID_COOKIE_NAME)
     
-    result = database.create_abuse_report(
+    success = database.create_abuse_report(
         image_hash=data.image_hash,
         image_url=data.image_url,
         reporter_id=user_id,
@@ -146,9 +146,9 @@ async def submit_report(
         reason=data.reason
     )
     
-    if result.get("success"):
+    if success:
         logger.info(f"📢 收到举报: hash={data.image_hash}, reason={data.reason[:20]}...")
         return {"success": True, "message": "感谢您的举报，我们会尽快处理"}
     else:
-        logger.error(f"❌ 举报提交失败: {result}")
+        logger.error(f"❌ 举报提交失败: 数据库操作错误")
         raise HTTPException(status_code=500, detail="举报提交失败")

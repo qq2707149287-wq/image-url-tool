@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 import boto3
 from botocore.client import Config
+from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
 
 logger = logging.getLogger(__name__)
 
@@ -51,31 +52,46 @@ def ensure_bucket_exists(s3_client, bucket_name):
     """确保 MinIO 存储桶存在，如果不存在则创建"""
     try:
         s3_client.head_bucket(Bucket=bucket_name)
-    except Exception:
-        try:
-            logger.info(f"Using bucket: {bucket_name}")
-            # 注意: MinIO 创建桶通常不需要 LocationConstraint，但在某些 S3 兼容实现中可能需要
-            s3_client.create_bucket(Bucket=bucket_name)
-            logger.info(f"✅ Created bucket: {bucket_name}")
-            
-            # 设置 Bucket 策略为 public (只读)
-            import json
-            policy = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Effect": "Allow",
-                        "Principal": {"AWS": "*"},
-                        "Action": ["s3:GetObject"],
-                        "Resource": [f"arn:aws:s3:::{bucket_name}/*"]
-                    }
-                ]
-            }
-            s3_client.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(policy))
-            logger.info(f"🔓 Bucket policy set to public read")
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to create bucket {bucket_name}: {e}")
+    except ClientError as e:
+        # 桶不存在（404）或无权限（403）
+        error_code = e.response.get('Error', {}).get('Code', '')
+        if error_code in ('404', 'NoSuchBucket'):
+            _create_bucket_with_policy(s3_client, bucket_name)
+        else:
+            logger.error(f"❌ 检查存储桶失败 (权限不足?): {e}")
+    except EndpointConnectionError as e:
+        logger.error(f"❌ 无法连接到存储服务: {e}")
+    except Exception as e:
+        # 兜底处理未知异常
+        logger.error(f"❌ 检查存储桶时发生未知错误: {e}")
+
+def _create_bucket_with_policy(s3_client, bucket_name):
+    """创建存储桶并设置公开读策略（内部函数）"""
+    try:
+        logger.info(f"正在创建存储桶: {bucket_name}")
+        s3_client.create_bucket(Bucket=bucket_name)
+        logger.info(f"✅ 存储桶已创建: {bucket_name}")
+        
+        # 设置 Bucket 策略为 public (只读)
+        import json
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": "*"},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{bucket_name}/*"]
+                }
+            ]
+        }
+        s3_client.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(policy))
+        logger.info(f"🔓 存储桶策略已设置为公开读取")
+        
+    except ClientError as e:
+        logger.error(f"❌ 创建存储桶失败 (API错误): {e}")
+    except EndpointConnectionError as e:
+        logger.error(f"❌ 创建存储桶失败 (网络错误): {e}")
 
 def upload_to_minio(data: bytes, name: str, fhash: str) -> dict[str, Any]:
     """
@@ -124,8 +140,30 @@ def upload_to_minio(data: bytes, name: str, fhash: str) -> dict[str, Any]:
             "key": key,
             "content_type": content_type
         }
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code', '')
+        logger.error(f"❌ [MyCloud] S3 API 错误 ({error_code}): {e}")
+        return {
+            "success": False,
+            "service": "MyCloud",
+            "error": f"S3 API 错误: {error_code}"
+        }
+    except EndpointConnectionError as e:
+        logger.error(f"❌ [MyCloud] 网络连接失败: {e}")
+        return {
+            "success": False,
+            "service": "MyCloud",
+            "error": "存储服务连接失败"
+        }
+    except RuntimeError as e:
+        logger.error(f"❌ [MyCloud] 初始化错误: {e}")
+        return {
+            "success": False,
+            "service": "MyCloud",
+            "error": str(e)
+        }
     except Exception as e:
-        logger.error(f"❌ [MyCloud] 错误: {e}")
+        logger.error(f"❌ [MyCloud] 未知错误: {e}")
         return {
             "success": False,
             "service": "MyCloud",
@@ -153,6 +191,16 @@ def get_minio_object(object_name: str) -> dict[str, Any]:
     try:
         obj = s3.get_object(Bucket=MINIO_BUCKET_NAME, Key=object_name)
         return obj
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code', '')
+        if error_code == 'NoSuchKey':
+            logger.warning(f"❌ 对象不存在: {object_name}")
+        else:
+            logger.warning(f"❌ 读取对象失败 (S3 错误 {error_code}): {e}")
+        raise
+    except EndpointConnectionError as e:
+        logger.error(f"❌ 读取对象失败 (网络错误): {e}")
+        raise
     except Exception as e:
         logger.warning(f"❌ 读取 MyCloud 对象失败: {e}")
         raise
@@ -176,6 +224,13 @@ def delete_from_minio(object_name: str) -> bool:
     try:
         s3.delete_object(Bucket=MINIO_BUCKET_NAME, Key=object_name)
         return True
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code', '')
+        logger.error(f"❌ [MyCloud] 删除失败 (S3 错误 {error_code}): {e}")
+        return False
+    except EndpointConnectionError as e:
+        logger.error(f"❌ [MyCloud] 删除失败 (网络错误): {e}")
+        return False
     except Exception as e:
-        logger.error(f"❌ [MyCloud] MinIO 删除失败: {e}")
+        logger.error(f"❌ [MyCloud] 删除失败 (未知错误): {e}")
         return False

@@ -49,10 +49,17 @@ def calculate_hash(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()[:32]
 
 def get_image_info(content: bytes) -> dict[str, int]:
+    """获取图片尺寸信息，失败时返回默认值"""
     try:
         img = Image.open(BytesIO(content))
         return {"width": img.width, "height": img.height, "size": len(content)}
-    except Exception:
+    except (IOError, OSError) as e:
+        # PIL 无法解析图片格式
+        logger.debug(f"图片格式解析失败: {e}")
+        return {"width": 0, "height": 0, "size": len(content)}
+    except Exception as e:
+        # 其他未知错误
+        logger.warning(f"获取图片信息时发生未知错误: {e}")
         return {"width": 0, "height": 0, "size": len(content)}
 
 def validate_file_upload(filename: str, content: bytes, max_size: int = MAX_FILE_SIZE) -> None:
@@ -404,7 +411,13 @@ def get_mycloud_image(
         return StreamingResponse(body, media_type=content_type, headers=headers)
     except HTTPException:
         raise
-    except Exception:
+    except storage.ClientError as e:
+        # S3 API 错误（对象不存在等）
+        logger.warning(f"获取图片失败 (S3 错误): {e}")
+        raise HTTPException(status_code=404, detail="图片未找到")
+    except Exception as e:
+        # 其他未知错误
+        logger.error(f"获取图片时发生未知错误: {e}")
         raise HTTPException(status_code=404, detail="图片未找到")
 
 @router.post("/validate")
