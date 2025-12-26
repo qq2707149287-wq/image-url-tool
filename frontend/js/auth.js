@@ -149,11 +149,65 @@ document.addEventListener("DOMContentLoaded", function () {
     // Functions
 
     async function checkLoginStatus() {
-        if (token && username) {
-            // 先显示缓存的用户名
-            if (authBtn) authBtn.innerText = "👤 " + username;
+        var guestTools = document.getElementById("guestTools");
+        var userMenuContainer = document.getElementById("userMenuContainer");
 
-            // 验证 Token 并获取最新信息(如管理员状态)
+        // Elements in Header
+        var headerUserName = document.getElementById("headerUserName");
+        var headerUserAvatar = document.getElementById("headerUserAvatar");
+        var userMenuTrigger = document.getElementById("userMenuTrigger");
+
+        // Elements in Dropdown
+        var dropdownUserName = document.getElementById("dropdownUserName");
+        var dropdownUserEmail = document.getElementById("dropdownUserEmail");
+        var dropdownVipBadge = document.getElementById("dropdownVipBadge");
+        var dropdownAdminLink = document.getElementById("dropdownAdminLink");
+        var dropdownSettingsBtn = document.getElementById("dropdownSettingsBtn"); // Account Settings
+        var dropdownLogoutBtn = document.getElementById("dropdownLogoutBtn");
+
+
+        if (token && username) {
+            // ============ LOGGED IN ============
+            if (guestTools) guestTools.style.display = "none";
+            if (userMenuContainer) userMenuContainer.style.display = "block";
+
+            // Basic Display
+            if (headerUserName) headerUserName.innerText = username;
+            if (dropdownUserName) dropdownUserName.innerText = username;
+
+            // Avatar Placeholder (Real avatar loaded from /auth/me)
+            if (headerUserAvatar && !headerUserAvatar.src) {
+                // Keep existing or default
+            }
+
+            // Bind Dropdown Trigger
+            if (userMenuTrigger) {
+                userMenuTrigger.onclick = function (e) {
+                    e.stopPropagation(); // Prevent immediate closing
+                    if (window.toggleUserMenu) window.toggleUserMenu();
+                };
+            }
+
+            // Bind Dropdown Actions
+            if (dropdownSettingsBtn) {
+                dropdownSettingsBtn.onclick = function () {
+                    // Open the original User Info Modal which has all settings
+                    if (authModal) authModal.style.display = "flex";
+                    showUserInfo();
+                    // Close dropdown
+                    if (window.toggleUserMenu) {
+                        var menu = document.getElementById('userDropdown');
+                        if (menu) menu.style.display = 'none';
+                        if (userMenuTrigger) userMenuTrigger.classList.remove('active');
+                    }
+                };
+            }
+
+            if (dropdownLogoutBtn) {
+                dropdownLogoutBtn.onclick = handleLogout;
+            }
+
+            // Verify Token & Get Details
             try {
                 var res = await fetch("/auth/me", {
                     headers: { "Authorization": "Bearer " + token }
@@ -161,57 +215,83 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (res.ok) {
                     var user = await res.json();
 
-                    // [FIX] 同步最新的 VIP/Admin 状态到 localStorage (修复已登录用户状态不同步问题)
+                    // Sync Storage
                     localStorage.setItem("is_vip", user.is_vip === true ? 'true' : 'false');
                     localStorage.setItem("is_admin", user.is_admin === true ? 'true' : 'false');
-
-                    var badge = "";
-                    if (user.is_admin) {
-                        badge += " <span style='background:red;color:white;padding:2px 4px;border-radius:4px;font-size:0.8em'>ADMIN</span>";
-                    }
-                    if (user.is_vip) {
-                        badge += " <span style='background:linear-gradient(45deg, #FFD700, #FFA500);color:white;padding:2px 4px;border-radius:4px;font-size:0.8em;margin-left:5px'>VIP</span>";
-                    }
-                    // 如果有头像，显示头像；否则显示默认图标
-                    // 添加 onerror 处理，加载失败时回退到默认图标
-                    var avatarHtml = user.avatar
-                        ? "<img src='" + user.avatar + "' onerror=\"this.outerHTML='👤 '\" style='width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:5px'>"
-                        : "👤 ";
-                    if (authBtn) {
-                        // [Fix] 用户名过长截断处理
-                        var nameHtml = "<span style='max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;'>" + user.username + "</span>";
-                        authBtn.innerHTML = avatarHtml + nameHtml + badge;
-                        authBtn.title = user.username; // 鼠标悬停显示全名
-                    }
-                    console.log("User avatar URL:", user.avatar); // Debug log
-
-                    // 保存 admin 状态供其他模块使用 (如 history.js)
-                    // 保存 admin 状态供其他模块使用 (如 history.js)
                     window.currentUser = user;
 
-                    // 显示/隐藏管理员工具
+                    // Update UI with details
+                    var fallbackAvatar = document.getElementById("headerUserAvatarFallback");
+
+                    if (headerUserAvatar) {
+                        if (user.avatar) {
+                            headerUserAvatar.src = user.avatar;
+                            headerUserAvatar.style.display = 'block';
+                            if (fallbackAvatar) fallbackAvatar.style.display = 'none';
+
+                            // Re-bind error handler to show fallback if load fails
+                            headerUserAvatar.onerror = function () {
+                                this.style.display = 'none';
+                                if (fallbackAvatar) fallbackAvatar.style.display = 'flex'; // Flex for centering SVG
+                            };
+                        } else {
+                            // No avatar set -> Show fallback
+                            headerUserAvatar.style.display = 'none';
+                            if (fallbackAvatar) fallbackAvatar.style.display = 'flex';
+                        }
+                    }
+                    if (dropdownUserEmail) {
+                        dropdownUserEmail.innerText = user.email || (user.is_admin ? "管理员" : "普通用户");
+                    }
+
+                    // VIP Badge (Dropdown + Header)
+                    var headerVipBadge = document.getElementById("headerVipBadge");
+                    var upgradeVipBtn = document.getElementById("upgradeVipBtn");
+
+                    if (dropdownVipBadge) {
+                        dropdownVipBadge.style.display = user.is_vip ? "inline-block" : "none";
+                    }
+                    if (headerVipBadge) {
+                        headerVipBadge.style.display = user.is_vip ? "inline-block" : "none";
+                    }
+
+                    // Hide "Upgrade VIP" btn if user is already VIP
+                    if (upgradeVipBtn) {
+                        if (user.is_vip) upgradeVipBtn.style.display = "none";
+                        // else upgradeVipBtn.style.display = "flex"; // Optional: keep it visible or not? 
+                        // Usually keep it visible for non-VIP logged in users
+                    }
+
+                    // Admin Link
+
+                    // Admin Link
+                    if (dropdownAdminLink) {
+                        dropdownAdminLink.style.display = user.is_admin ? "flex" : "none";
+                    }
+
+                    // Also show/hide Admin Tools in the User Info Modal (legacy/backup)
                     var adminTools = document.getElementById("adminTools");
                     if (adminTools) {
                         adminTools.style.display = user.is_admin ? "block" : "none";
                     }
 
-                    // 更新上传UI (因为 updateUploadUI 可能依赖 window.currentUser)
+                    // [NEW] Update Upload UI based on private mode preference if saved?
+                    // actually updateUploadUI handles its own state, but we might want to refresh it.
                     if (window.updateUploadUI) window.updateUploadUI();
 
-                    // [NEW] 启动通知轮询
                     startNotificationPolling();
                 } else {
-                    // Token 过期或无效
                     handleLogout();
                 }
             } catch (e) {
                 console.error("Auth check failed", e);
             }
         } else {
-            if (authBtn) authBtn.innerText = "👤 登录/注册";
+            // ============ GUEST ============
+            if (guestTools) guestTools.style.display = "flex";
+            if (userMenuContainer) userMenuContainer.style.display = "none";
+
             window.currentUser = null;
-            var adminTools = document.getElementById("adminTools");
-            if (adminTools) adminTools.style.display = "none";
             if (window.updateUploadUI) window.updateUploadUI();
         }
     }

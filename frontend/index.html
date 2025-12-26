@@ -5,52 +5,200 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>私有云图床工具</title>
+    <!-- SVG Favicon (Blue Cloud) -->
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563eb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.5 19c0-3.037-2.463-5.5-5.5-5.5S6.5 15.963 6.5 19'/%3E%3Cpath d='M20.614 16.948A4.997 4.997 0 0 0 21 16c0-2.761-2.239-5-5-5a4.997 4.997 0 0 0-3 .997A4.997 4.997 0 0 0 10 11a5 5 0 0 0-5 5c0 .356.042.703.116 1.037'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="/static/style.css?v=1.9">
+    <link rel="stylesheet" href="/static/premium.css?v=1.9">
 </head>
 
 <body>
     <div class="container">
+        <!-- 广告位：顶部 -->
+        <div id="ad-top" class="ad-placeholder" style="display:none;"></div>
+
         <div class="header">
             <div class="header-brand">
-                <h1>私有云图床</h1>
-                <p class="subtitle">永久存储 · 批量处理</p>
+                <div class="brand-logo-text" style="display:flex;align-items:center;gap:10px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="text-primary" style="color: #2563eb;">
+                        <path d="M17.5 19c0-3.037-2.463-5.5-5.5-5.5S6.5 15.963 6.5 19" />
+                        <path
+                            d="M20.614 16.948A4.997 4.997 0 0 0 21 16c0-2.761-2.239-5-5-5a4.997 4.997 0 0 0-3 .997A4.997 4.997 0 0 0 10 11a5 5 0 0 0-5 5c0 .356.042.703.116 1.037" />
+                    </svg>
+                    私有云图床
+                </div>
+                <p class="subtitle">永久存储 · 极致体验 · 批量管理</p>
             </div>
+
             <div class="header-tools">
-                <button class="btn-ghost" id="themeToggle">🌙 深色模式</button>
-                <button class="btn-primary" id="upgradeVipBtn"
-                    style="font-size: 13px; padding: 6px 12px; border-radius: 20px; background: linear-gradient(45deg, #FFD700, #FFA500); border:none; color:white; font-weight:bold; box-shadow: 0 2px 5px rgba(255, 165, 0, 0.3);">💎
-                    升级 VIP</button>
-                <button class="btn-ghost" id="settingsBtn" title="系统设置">⚙️</button>
-                <button class="btn-ghost" id="authBtn">👤 登录/注册</button>
+                <button class="btn-ghost" id="themeToggle" title="切换深色模式"
+                    style="display:flex;align-items:center;justify-content:center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                    </svg>
+                </button>
+                <button class="btn-vip" id="upgradeVipBtn" style="display:flex;align-items:center;gap:6px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 3h12l4 6-10 13L2 9Z" />
+                        <path d="M11 3 8 9l4 13 4-13-3-6" />
+                        <path d="M2 9h20" />
+                    </svg>
+                    升级 VIP
+                </button>
+
+                <!-- 游客状态 -->
+                <div id="guestTools" class="auth-tools">
+                    <button class="btn-ghost" onclick="document.getElementById('authBtn').click()">登录</button>
+                    <button class="btn-primary"
+                        onclick="document.getElementById('authToggleLink').click();document.getElementById('authBtn').click()">注册</button>
+                    <!-- 隐藏的原始按钮，用于兼容旧 JS -->
+                    <button id="authBtn" style="display:none">登录/注册</button>
+                </div>
+
+                <!-- 登录状态 (下拉菜单) -->
+                <div id="userMenuContainer" class="user-menu-container" style="display:none;">
+                    <button class="user-menu-trigger" id="userMenuTrigger">
+                        <img id="headerUserAvatar" src=""
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+                            alt="Avatar">
+                        <!-- Fallback SVG Avatar -->
+                        <div id="headerUserAvatarFallback"
+                            style="display:none;width:34px;height:34px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                            </svg>
+                        </div>
+                        <span id="headerUserName">User</span>
+                        <!-- Header VIP Badge -->
+                        <span id="headerVipBadge" class="vip-badge-mini" style="display:none">VIP</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="dropdown-arrow">
+                            <path d="m6 9 6 6 6-6" />
+                        </svg>
+                    </button>
+
+                    <div class="user-dropdown-menu" id="userDropdown">
+                        <div class="dropdown-header">
+                            <div class="user-info-row">
+                                <strong id="dropdownUserName">User</strong>
+                                <span id="dropdownVipBadge" class="vip-badge" style="display:none">VIP</span>
+                            </div>
+                            <small id="dropdownUserEmail" class="text-muted">user@example.com</small>
+                        </div>
+                        <div class="dropdown-divider"></div>
+
+                        <a href="/admin" id="dropdownAdminLink" class="dropdown-item" style="display:none;">
+                            <span>👑 管理后台</span>
+                        </a>
+
+                        <!-- New Settings -->
+                        <button class="dropdown-item" onclick="window.showToast('功能开发中...', 'info')">
+                            <span>📉 图片压缩: 高</span>
+                        </button>
+                        <button class="dropdown-item" onclick="window.showToast('功能开发中...', 'info')">
+                            <span>📋 自动复制: 开</span>
+                        </button>
+                        <button class="dropdown-item" onclick="window.showToast('功能开发中...', 'info')">
+                            <span>🌐 语言设置: 简体中文</span>
+                        </button>
+
+                        <div class="dropdown-divider"></div>
+
+                        <button class="dropdown-item" id="dropdownSettingsBtn">
+                            <span>⚙️ 账号设置</span>
+                        </button>
+                        <button class="dropdown-item" id="settingsBtn">
+                            <span>🛠️ 系统设置</span>
+                        </button>
+
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item text-danger" id="dropdownLogoutBtn">
+                            <span>🚪 退出登录</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
         <div class="tabs">
-            <button class="tab active" id="tab-upload">上传</button>
-            <button class="tab" id="tab-history">历史记录</button>
+            <button class="tab active" id="tab-upload">
+                <span style="display:flex;align-items:center;gap:6px;justify-content:center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    上传图片
+                </span>
+            </button>
+            <button class="tab" id="tab-history">
+                <span style="display:flex;align-items:center;gap:6px;justify-content:center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 3v5h5" />
+                        <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+                    </svg>
+                    历史记录
+                </span>
+            </button>
         </div>
 
         <!-- 1. 批量上传页 -->
         <div id="content-upload" class="tab-content active">
-            <!-- 上传模式切换 -->
-            <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:10px;">
-                <div class="mode-toggle-group">
-                    <span>私有</span>
-                    <button type="button" id="uploadModeBtn" class="mode-toggle-btn active"></button>
-                    <span>共享</span>
-                </div>
-            </div>
-
+            <!-- 漂亮的上传区域 -->
             <div id="uploadArea" class="upload-area" tabindex="0">
-                <p>点击、拖拽或 Ctrl+V 粘贴图片到这里</p>
-                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">支持 JPG/PNG/WebP 等格式，最大 10MB
-                </p>
+                <div class="upload-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+                        style="color:#60a5fa;">
+                        <path d="M17.5 19c0-3.037-2.463-5.5-5.5-5.5S6.5 15.963 6.5 19" />
+                        <path
+                            d="M20.614 16.948A4.997 4.997 0 0 0 21 16c0-2.761-2.239-5-5-5a4.997 4.997 0 0 0-3 .997A4.997 4.997 0 0 0 10 11a5 5 0 0 0-5 5c0 .356.042.703.116 1.037" />
+                    </svg>
+                </div>
+                <h3>点击或拖拽图片到这里</h3>
+                <p class="upload-hint">支持 Ctrl+V 粘贴 · 单文件最大 10MB</p>
+
+                <!-- 嵌入式上传模式切换 -->
+                <div class="upload-mode-segmented">
+                    <button type="button" class="segment-btn active" data-mode="private"
+                        onclick="toggleUploadMode('private', event)"
+                        style="display:inline-flex;align-items:center;gap:4px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        私有存储</button>
+                    <button type="button" class="segment-btn" data-mode="public"
+                        onclick="toggleUploadMode('public', event)"
+                        style="display:inline-flex;align-items:center;gap:4px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="2" y1="12" x2="22" y2="12" />
+                            <path
+                                d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                        公开共享</button>
+                    <!-- 隐藏的原始 Toggle 按钮 -->
+                    <button type="button" id="uploadModeBtn" class="mode-toggle-btn" style="display:none;"></button>
+                </div>
             </div>
 
             <input type="file" id="fileInput" accept="image/*" multiple hidden>
 
-            <!-- 上传列表的多选工具栏 -->
-            <div class="multi-select-toolbar" id="uploadMultiToolbar" style="display:none; margin-bottom:10px;">
+            <!-- 批量操作工具栏 -->
+            <div class="multi-select-toolbar" id="uploadMultiToolbar" style="display:none; animation: fadeIn 0.3s;">
                 <label style="font-size:14px; display:flex; align-items:center; cursor:pointer;">
                     <input type="checkbox" id="uploadSelectAll"
                         style="width:16px; height:16px; margin-right:8px; accent-color:var(--primary-color);">
@@ -85,41 +233,58 @@
                     </label>
                 </div>
                 <div class="history-tools" style="display:flex; align-items:center; gap:15px;">
-                    <!-- 查看模式切换 -->
-                    <div class="mode-toggle-group">
-                        <span style="font-size:13px">私有</span>
-                        <button type="button" id="viewModeBtn" class="mode-toggle-btn active"></button>
-                        <span style="font-size:13px">共享</span>
+                    <!-- 查看模式切换 (Use Segmented Control Style) -->
+                    <div class="history-mode-segment">
+                        <button type="button" class="segment-btn active" id="viewBtnPrivate" data-mode="private"
+                            style="display:inline-flex;align-items:center;gap:4px; padding: 6px 12px; font-size: 13px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
+                            私有</button>
+                        <button type="button" class="segment-btn" id="viewBtnShared" data-mode="shared"
+                            style="display:inline-flex;align-items:center;gap:4px; padding: 6px 12px; font-size: 13px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="2" y1="12" x2="22" y2="12" />
+                                <path
+                                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                            共享</button>
                     </div>
-                    <button class="btn-ghost" id="clearHistoryBtn" style="color:var(--danger)">清空全部</button>
+                    <button class="btn-ghost" id="clearHistoryBtn" style="color:var(--danger)">🗑️ 清空全部</button>
                 </div>
             </div>
 
-            <!-- 搜索栏 -->
-            <div style="margin-bottom: 1rem;">
-                <div style="position: relative; max-width: 400px;">
-                    <input type="text" id="historySearch" placeholder="🔍 搜索文件名或URL..." class="input-text"
-                        style="width: 100%; padding: 10px 40px 10px 15px; font-size: 14px; border-radius: 8px; border: 1px solid var(--border-color); transition: all 0.2s;">
-                    <button id="historySearchBtn"
-                        style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: var(--primary-color); color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 13px; transition: all 0.2s;">
-                        搜索
-                    </button>
-                </div>
+            <!-- 搜索栏 (Refined) -->
+            <div class="search-container">
+                <input type="text" id="historySearch" placeholder="搜索文件名或URL..." class="search-input">
+                <button id="historySearchBtn" class="search-btn-icon" title="搜索">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </button>
             </div>
 
-            <!-- 历史多选工具栏 -->
-            <div class="multi-select-toolbar">
-                <label style="font-size:14px; display:flex; align-items:center; cursor:pointer;">
+            <!-- 历史多选工具栏 (Refined) -->
+            <div class="history-toolbar">
+                <label
+                    style="font-size:14px; display:flex; align-items:center; cursor:pointer; color: var(--text-color);">
                     <input type="checkbox" id="selectAllCheckbox"
                         style="width:16px; height:16px; margin-right:8px; accent-color:var(--primary-color);">
-                    全选 / 反选
+                    <span style="font-weight: 500;">全选 / 反选</span>
                 </label>
-                <div class="multi-actions" id="multiActions" style="display:none;">
-                    <span style="font-size:13px; color:var(--text-secondary); margin-right:10px;">已选 <b
-                            id="selectedCount">0</b> 项</span>
-                    <button class="btn-mini" id="batchGenerateDescBtn">生成json文件</button>
-                    <button class="btn-mini" id="batchDeleteBtn"
-                        style="color:var(--danger); border-color:var(--danger);">删除</button>
+                <div class="multi-actions" id="multiActions" style="display:none; align-items: center; gap: 10px;">
+                    <span style="font-size:13px; color:var(--text-secondary); margin-right:5px;">已选 <b
+                            id="selectedCount" style="color: var(--primary-color);">0</b> 项</span>
+                    <button class="btn-mini btn-ghost" id="batchGenerateDescBtn">📄 生成JSON</button>
+                    <button class="btn-mini btn-ghost text-danger" id="batchDeleteBtn">🗑️ 删除</button>
                 </div>
             </div>
 
@@ -328,20 +493,62 @@
                 <button class="modal-close" id="settingsModalCloseBtn">×</button>
             </div>
             <div class="modal-body">
+                <!-- Dummy Options -->
                 <div class="form-group"
-                    style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                    style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
                     <div>
-                        <span style="font-weight: bold; display: block;">调试模式</span>
-                        <small style="color: #666;">开启后注册无需验证邮箱</small>
+                        <span style="font-weight: 500;">图片压缩</span>
+                        <small style="color: #94a3b8; display:block;">自动压缩过大的图片</small>
+                    </div>
+                    <select class="form-select"
+                        style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; color: #64748b;"
+                        onchange="window.showToast('设置已保存', 'success')">
+                        <option>关闭</option>
+                        <option selected>标准</option>
+                        <option>强力</option>
+                    </select>
+                </div>
+
+                <div class="form-group"
+                    style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
+                    <div>
+                        <span style="font-weight: 500;">自动复制链接</span>
+                        <small style="color: #94a3b8; display:block;">上传成功后自动复制</small>
                     </div>
                     <label class="switch">
-                        <input type="checkbox" id="debugModeToggle">
+                        <input type="checkbox" checked onchange="window.showToast('设置已保存', 'success')">
                         <span class="slider round"></span>
                     </label>
                 </div>
+
+                <div class="form-group"
+                    style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
+                    <div>
+                        <span style="font-weight: 500;">语言设置</span>
+                    </div>
+                    <select class="form-select"
+                        style="padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; color: #64748b;"
+                        onchange="window.showToast('Language setting saved', 'success')">
+                        <option selected>简体中文</option>
+                        <option>English</option>
+                    </select>
+                </div>
+
+                <!-- Hidden Debug Option -->
+                <div id="debugSettingsGroup" style="display: none;">
+                    <div class="form-group"
+                        style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; margin-top: 10px; background: #fffbeeb0; border-radius: 8px; padding-left: 10px; padding-right: 10px;">
+                        <div>
+                            <span style="font-weight: bold; color: #d97706;">🛠️ 调试模式</span>
+                            <small style="color: #d97706; display: block;">开启后注册无需验证邮箱</small>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="debugModeToggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
             </div>
-
-
         </div>
     </div>
     </div>

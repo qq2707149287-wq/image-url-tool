@@ -245,10 +245,12 @@ def get_chinese_clip():
             model_id = "OFA-Sys/chinese-clip-vit-base-patch16"
             # [Fix] 使用临时变量，确保加载完全成功后再赋值给全局变量
             # [Fix 2] 添加 attn_implementation='eager' 解决 transformers 4.50+ 的 meta device bug
+            # [Fix 3] 强制 device_map="cpu"，防止权重停留在 meta device
             model = ModelClass.from_pretrained(
                 model_id, 
-                low_cpu_mem_usage=False,
-                attn_implementation="eager"  # 显式使用 eager attention，避免 SDPA meta bug
+                low_cpu_mem_usage=True, 
+                device_map="cpu",
+                attn_implementation="eager"
             )
             processor = ProcessorClass.from_pretrained(model_id)
             
@@ -278,9 +280,13 @@ def get_openai_clip():
 
             model_id = "openai/clip-vit-base-patch32"
             # [FIX] 使用临时变量，防止部分加载导致全局状态不一致
-            # 添加 device_map=None 防止 accelerate 自动将模型放到 meta device
-            model = CLIPModel.from_pretrained(model_id, low_cpu_mem_usage=False, device_map=None)
-            model.to('cpu') # 显式移动到 CPU
+            # 添加 device_map="cpu" 强制加载到 CPU，避免 meta device 错误
+            model = CLIPModel.from_pretrained(
+                model_id, 
+                low_cpu_mem_usage=True, 
+                device_map="cpu"
+            )
+            # model.to('cpu') # 不需要手动 to('cpu')，device_map 会处理
             processor = CLIPProcessor.from_pretrained(model_id)
             
             _openai_clip_model = model

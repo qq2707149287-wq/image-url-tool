@@ -127,7 +127,9 @@ document.addEventListener("DOMContentLoaded", function () {
     var downloadDescBtn = document.getElementById("downloadDescBtn");
 
     // 查看模式切换相关
-    var viewModeBtn = document.getElementById("viewModeBtn");
+    // 查看模式切换相关
+    var viewBtnPrivate = document.getElementById("viewBtnPrivate");
+    var viewBtnShared = document.getElementById("viewBtnShared");
     var onlyMineFilter = document.getElementById("onlyMineFilter");
     var onlyMineCheckbox = document.getElementById("onlyMineCheckbox");
 
@@ -135,13 +137,16 @@ document.addEventListener("DOMContentLoaded", function () {
     function updateViewModeUI() {
         var isSharedView = window.viewMode === "shared";
 
-        if (viewModeBtn) {
+        if (viewBtnPrivate && viewBtnShared) {
             if (isSharedView) {
-                viewModeBtn.classList.add('active');
+                viewBtnPrivate.classList.remove('active');
+                viewBtnShared.classList.add('active');
             } else {
-                viewModeBtn.classList.remove('active');
+                viewBtnPrivate.classList.add('active');
+                viewBtnShared.classList.remove('active');
             }
         }
+
         // 只在共享模式下显示"只看我的"筛选 (后端支持 device_id 过滤)
         if (onlyMineFilter) {
             onlyMineFilter.style.display = isSharedView ? "flex" : "none";
@@ -152,35 +157,39 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // 切换查看模式
-    if (viewModeBtn) {
-        // 初始化状态
+    function switchViewMode(mode) {
+        if (mode === window.viewMode) return;
+
+        // 检查登录状态 (简单判断 token)
+        var token = localStorage.getItem("token");
+        if (!token && mode === 'private') {
+            if (window.showToast) window.showToast("登录后可查看私有图片", "warning");
+            return;
+        }
+
+        window.viewMode = mode;
+        localStorage.setItem("viewMode", window.viewMode);
         updateViewModeUI();
 
-        viewModeBtn.onclick = function () {
-            // 检查登录状态 (简单判断 token)
-            var token = localStorage.getItem("token");
-            if (!token) {
-                if (window.showToast) window.showToast("匿名用户仅支持查看共享模式", "warning");
-                // 强制保持 shared
-                window.viewMode = "shared";
-                updateViewModeUI();
-                return;
-            }
+        var msg = window.viewMode === "shared"
+            ? "正在查看共享图片"
+            : "正在查看私有图片";
+        if (window.showToast) window.showToast(msg, "info");
 
-            window.viewMode = window.viewMode === "shared" ? "private" : "shared";
-            localStorage.setItem("viewMode", window.viewMode);
-            updateViewModeUI();
-
-            var msg = window.viewMode === "shared"
-                ? "正在查看共享图片"
-                : "正在查看私有图片";
-            if (window.showToast) window.showToast(msg, "info");
-
-            // 重新加载历史记录
-            window.historyPage = 1;
-            loadHistory();
-        };
+        // 重新加载历史记录
+        window.historyPage = 1;
+        loadHistory();
     }
+
+    if (viewBtnPrivate) {
+        viewBtnPrivate.onclick = function () { switchViewMode('private'); };
+    }
+    if (viewBtnShared) {
+        viewBtnShared.onclick = function () { switchViewMode('shared'); };
+    }
+
+    // 初始化调用
+    updateViewModeUI();
 
     // "只看我的"筛选
     if (onlyMineCheckbox) {
